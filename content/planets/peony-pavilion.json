@@ -1,0 +1,103 @@
+{
+  "name": "peony-pavilion",
+  "parent": "sun",
+  "orbitRadius": 320,
+  "orbitTime": 24000,
+  "rotateTime": 1200,
+  "radius": 0.7,
+  "bloom": true,
+  "iconColor": "7b68ee",
+  "hasAtmosphere": true,
+  "updateLighting": true,
+  "atmosphereRadIn": 0.02,
+  "atmosphereRadOut": 0.3,
+  "atmosphereColor": "9b8ec4c0",
+  "lightColor": "7b68ee80",
+  "landCloudColor": "6e6e8a44",
+  "accessible": true,
+  "alwaysUnlocked": true,
+  "drawOrbit": true,
+  "visible": true,
+  "minZoom": 0.001,
+  "maxZoom": 10,
+  "lightSrcFrom": 0,
+  "lightSrcTo": 1,
+  "lightDstFrom": 0,
+  "lightDstTo": 1.2,
+  "tidalLock": false,
+  "sectorSize": 2,
+  "sectorSeed": 42,
+  "startSector": 0,
+  "clearSectorOnLose": true,
+  "allowSectorInvasion": false,
+  "allowLaunchToNumbered": false,
+  "allowLaunchSchematics": true,
+  "allowLaunchLoadout": true,
+  "launchCapacityMultiplier": 0.4,
+  "prebuildBase": true,
+  "enemyCoreSpawnReplace": true,
+  "defaultCore": "core-shard",
+  "rules": {
+    "coreDestroyClear": true,
+    "worldProcessorPlayerLink": true,
+    "unitPayloadsExplode": true,
+    "showSpawns": true,
+    "logicUnitDeconstruct": true,
+    "randomWaveAI": true,
+    "planet": "peony-pavilion"
+  },
+  "defaultAttributes": {
+    "spores": -1,
+    "light": 0.15
+  },
+  "mesh": {
+    "type": "MultiMesh",
+    "meshes": [
+      {
+        "type": "NoiseMesh",
+        "planet": "peony-pavilion",
+        "seed": 42,
+        "color1": "6b5b8a",
+        "color2": "4a4060",
+        "divisions": 5,
+        "radius": 0.7,
+        "octaves": 8,
+        "persistence": 0.5,
+        "scale": 1.5,
+        "mag": 0.4
+      },
+      {
+        "type": "NoiseMesh",
+        "planet": "peony-pavilion",
+        "seed": 77,
+        "color1": "4ec9a040",
+        "color2": "2d8a6e40",
+        "divisions": 5,
+        "radius": 0.68,
+        "octaves": 6,
+        "persistence": 0.5,
+        "scale": 2,
+        "mag": 0.3
+      }
+    ]
+  },
+  "cloudMesh": {
+    "type": "MultiMesh",
+    "meshes": [
+      {
+        "type": "HexSkyMesh",
+        "planet": "peony-pavilion",
+        "seed": 13,
+        "speed": 1.2,
+        "radius": 0.12,
+        "divisions": 5,
+        "color": "6e6e8a60",
+        "octaves": 2,
+        "persistence": 0.4,
+        "scl": 0.5,
+        "thresh": 0.45
+      }
+    ]
+  },
+  "generator": {}
+}

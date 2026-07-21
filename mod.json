@@ -1,8 +1,10 @@
 {
   "name": "ThePeonyPavilion",
-  "displayname": "牡丹亭",
-  "author": "视界&阿酒",
-  "description": "舰队遭遇袭击，主舰队被迫迫降到这里，扫描显示，这颗星球存在一个充满敌意的流窜AI...活下去。",
-  "version": "0.0.0",
-  "minGameVersion": "146"
+  "displayName": "[#7b68ee]牡 丹 亭[]",
+  "author": "视界 & 阿酒",
+  "subtitle": "[#9b8ec4]一场迫降，一颗星球，一个流窜的AI[]",
+  "description": "舰队遭遇袭击，主舰队被迫迫降到这里。扫描显示，这颗星球存在一个充满敌意的流窜AI……活下去。",
+  "version": "0.1.0",
+  "minGameVersion": "146",
+  "repo": "BassttElSevic/ThePeonyPavilion"
 }

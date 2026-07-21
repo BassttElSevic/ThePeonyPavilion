@@ -1,0 +1,19 @@
+{
+  "name": "crash-site",
+  "planet": "peony-pavilion",
+  "sector": 0,
+  "difficulty": 1,
+  "captureWave": 10,
+  "startWaveTimeMultiplier": 2.5,
+  "addStartingItems": true,
+  "alwaysUnlocked": true,
+  "showSectorLandInfo": true,
+  "allowLaunchSchematics": false,
+  "allowLaunchLoadout": false,
+  "attackAfterWaves": false,
+  "isLastSector": false,
+  "overrideLaunchDefaults": false,
+  "rules": {
+    "winWave": 10
+  }
+}
