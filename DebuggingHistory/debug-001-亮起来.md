@@ -1,13 +1,15 @@
-# Debugging Record #1 -- Phase 1: Planet Visibility
+**简体中文** | [English](debug-001-en.md)
 
-Date: 2026-07-21 ~ 2026-07-22
-Version: v0.1.0
-Issues resolved: 4
+# 调试记录 #1 -- 阶段一：星球亮起来
+
+日期: 2026-07-21 ~ 2026-07-22
+版本: v0.1.0
+解决问题数: 5
 
 
-## Issue 1: SectorPreset ContentParser Error -- Missing .msav Map File
+## 问题 1：SectorPreset ContentParser 报错 -- 缺少 .msav 地图文件
 
-### Error Log
+### 错误日志
 
 ```
 [E] Error loading content: content/sectors/crash-site.json
@@ -23,10 +25,10 @@ maps/thepeonypavilion-peony-pavilion/thepeonypavilion-crash-site.msav (internal)
     at mindustry.mod.ContentParser.lambda$read$27(ContentParser.java:972)
 ```
 
-### Source Analysis
+### 源码定位
 
-The stack trace points to `SectorPreset.initialize()` at line 84. Reading
-`Factory/Mindustry/core/src/mindustry/type/SectorPreset.java` lines 81-85:
+堆栈指向 `SectorPreset.initialize()` 第 84 行。阅读
+`Factory/Mindustry/core/src/mindustry/type/SectorPreset.java` 第 81-85 行：
 
 ```java
 public void initialize(Planet planet, int sector, boolean override){
@@ -36,72 +38,66 @@ public void initialize(Planet planet, int sector, boolean override){
     }
 ```
 
-When `generator` is null (not set in JSON), a `FileMapGenerator` is created
-using the sector's internal name as the filename. `FileMapGenerator`'s
-constructor immediately attempts `Fi.read()` on the `.msav` file -- if the
-file does not exist, it throws `ArcRuntimeException` at load time, not at
-play time.
+当 `generator` 为 null（JSON 中未设置）时，会创建一个 `FileMapGenerator`，
+使用星区的内部名作为文件名。`FileMapGenerator` 的构造函数立即调用
+`Fi.read()` 读取 `.msav` 文件——文件不存在则在加载阶段直接抛出
+`ArcRuntimeException`，而非等到游戏运行时。
 
-The expected path pattern is:
+期望的文件路径为：
 ```
-maps/<planet-internal-name>/<sector-internal-name>.msav
+maps/<星球内部名>/<星区内部名>.msav
 ```
-For our case:
+本项目的实际路径：
 ```
 maps/thepeonypavilion-peony-pavilion/thepeonypavilion-crash-site.msav
 ```
 
-### Fix
+### 修复
 
-For the "planet visibility" phase, the sector preset is not needed yet. Moved
-`crash-site.json` from `content/sectors/` to `maps/thepeonypavilion-peony-pavilion/`
-so that ContentParser skips it. The map file can be created later using the
-in-game map editor.
+"亮起来"阶段不需要星区预设。将 `crash-site.json` 从 `content/sectors/`
+移至 `maps/thepeonypavilion-peony-pavilion/`，让 ContentParser 跳过它。
+`.msav` 地图文件后续使用游戏内置地图编辑器创建后，再将 JSON 移回。
 
-Once the `.msav` file is ready, move `crash-site.json` back to `content/sectors/`.
-
-### Commit
+### 对应 Commit
 
 `947ec61`: fix: move sector JSON out of content/ -- needs .msav map file
 
 
-## Issue 2: Softlink Destruction -- Game "Delete Mod" Wipes Source Directory
+## 问题 2：软链接破坏 -- 游戏"删除 Mod"清空开发目录
 
-### Behavior
+### 现象
 
-When a symlink exists in `~/.local/share/Mindustry/mods/` pointing to the
-development directory `~/Factory/ThePeonyPavilion/`, invoking "Delete Mod"
-in-game recursively deletes the symlink target. All source files including
-`.git/` were lost.
+当 `~/.local/share/Mindustry/mods/` 中存在指向开发目录
+`~/Factory/ThePeonyPavilion/` 的软链接时，在游戏内点击"删除 Mod"
+会递归删除软链接目标。包括 `.git/` 在内的全部源码丢失。
 
-### Root Cause
+### 根因
 
-Mindustry's `Mods` class does not distinguish between symlinks and regular
-directories when deleting. The delete operation traverses into the target.
+Mindustry 的 `Mods` 类在删除时不区分软链接和普通目录，直接遍历目标删除。
 
-### Fix
+### 修复
 
-Restored from GitHub (`git clone`), re-applied all changes, committed and
-pushed. The correct workflow is:
+从 GitHub 恢复（`git clone`），重新应用所有修改，commit 并 push。
+正确的工作流为：
 
 ```
-Local edit -> git commit -> git push -> in-game "Import GitHub Mod"
+本地编辑 -> git commit -> git push -> 游戏内 "导入 GitHub Mod"
 ```
 
-Symlinks must not be used for Mindustry mod development.
+Mindustry Mod 开发中禁止使用软链接。
 
 
-## Issue 3: mod.json Field Validation Against ModMeta Source
+## 问题 3：mod.json 字段与 ModMeta 源码对照验证
 
-### Source Analysis
+### 源码定位
 
-Reading `Factory/Mindustry/core/src/mindustry/mod/Mods.java` lines 1376-1399,
-the `ModMeta` inner class defines these serializable fields:
+阅读 `Factory/Mindustry/core/src/mindustry/mod/Mods.java` 第 1376-1399 行，
+`ModMeta` 内部类定义了以下可序列化字段：
 
 ```java
 public static class ModMeta{
     public String name;
-    public String internalName;        // auto-generated: lowercase, spaces -> "-"
+    public String internalName;        // 自动生成：小写，空格替换为 "-"
     public String minGameVersion = "0";
     public @Nullable String displayName, author, description, subtitle, version, main, repo;
     public Seq<String> dependencies = Seq.with();
@@ -116,31 +112,31 @@ public static class ModMeta{
 }
 ```
 
-Key findings against the original mod.json:
+对照原始 mod.json 的关键发现：
 
-| Field in old mod.json | In ModMeta? | Action |
+| 原 mod.json 中的字段 | ModMeta 中是否存在 | 处理 |
 |---|---|---|
-| `displayname` (lowercase n) | `displayName` (capital N) | Fixed casing |
-| (missing) `subtitle` | `subtitle` exists | Added |
-| (missing) `repo` | `repo` exists | Added `BassttElSevic/ThePeonyPavilion` |
-| (missing) `hasScripts` | Does NOT exist | Removed from template; game auto-detects `scripts/main.js` |
+| `displayname`（小写 n） | `displayName`（大写 N） | 修正大小写 |
+| （缺失）`subtitle` | `subtitle` 存在 | 添加 |
+| （缺失）`repo` | `repo` 存在 | 添加 `BassttElSevic/ThePeonyPavilion` |
+| （缺失）`hasScripts` | **不存在** | 从模板中移除；游戏自动检测 `scripts/main.js` |
 
-The `hasScripts` field in VE's mod.json is silently ignored by the JSON
-deserializer. Mindustry detects scripts by checking for `scripts/main.js`
-at `Mods.loadScripts()` (line 800-830).
+VE 的 mod.json 中写的 `hasScripts` 字段被 JSON 反序列化器静默忽略。
+Mindustry 在 `Mods.loadScripts()`（第 800-830 行）中通过检查
+`scripts/main.js` 是否存在来判断是否加载脚本。
 
-### Commit
+### 对应 Commit
 
 `aa50418`: v0.1.0 -- corrected mod.json fields, added subtitle/repo
 
 
-## Issue 4: ContentParser Field Validation -- shownPlanets and databaseTag
+## 问题 4：ContentParser 字段验证 -- shownPlanets 和 databaseTag
 
-### Source Analysis
+### 源码定位
 
-`shownPlanets` was used in item JSON templates, but reading
-`Factory/Mindustry/core/src/mindustry/type/Item.java` (165 lines total)
-shows the Item class has these fields only:
+物品 JSON 模板中使用了 `shownPlanets` 字段，但阅读
+`Factory/Mindustry/core/src/mindustry/type/Item.java`（共 165 行），
+Item 类仅有以下字段：
 
 ```java
 public class Item extends UnlockableContent implements Senseable{
@@ -161,26 +157,24 @@ public class Item extends UnlockableContent implements Senseable{
 }
 ```
 
-No `shownPlanets`, no `databaseTag`. These fields appear only in
-`Block.java` (line 1324). ContentParser's `ignoreUnknownFields = true`
-(line 58) causes unknown JSON fields to be silently discarded -- VE's
-item JSONs with `shownPlanets` have no runtime effect on item visibility.
+没有 `shownPlanets`，也没有 `databaseTag`。这两个字段仅存在于
+`Block.java`（第 1324 行）。ContentParser 的 `ignoreUnknownFields = true`
+（第 58 行）导致未知 JSON 字段被静默丢弃——VE 物品 JSON 中的
+`shownPlanets` 在运行时对物品可见性没有任何实际影响。
 
-Planet visibility for items is determined by `Item.isOnPlanet()`, which
-checks ore generation and recipe references.
+物品的星球可见性由 `Item.isOnPlanet()` 方法通过检查矿石生成和配方引用来决定。
 
-### Fix
+### 修复
 
-Removed `shownPlanets` and `databaseTag` from all item JSON recommendations
-in the development plan. Updated pattern documentation to note that
-`shownPlanets` is Block-only.
+从开发计划的所有物品 JSON 推荐中移除 `shownPlanets` 和 `databaseTag`。
+更新模式文档注明 `shownPlanets` 仅 Block 类有效。
 
 
-## Issue 5: planetGrid() Redundancy with Planet Constructor
+## 问题 5：planetGrid() 与 Planet 构造函数的冗余
 
-### Source Analysis
+### 源码定位
 
-Reading `Factory/Mindustry/core/src/mindustry/type/Planet.java` lines 224-237:
+阅读 `Factory/Mindustry/core/src/mindustry/type/Planet.java` 第 224-237 行：
 
 ```java
 public Planet(String name, Planet parent, float radius, int sectorSize){
@@ -198,39 +192,37 @@ public Planet(String name, Planet parent, float radius, int sectorSize){
 }
 ```
 
-When `sectorSize > 0` is set in the planet JSON, the Planet constructor
-automatically creates the sector grid. VE's `scripts/sectorSize.js` with
-`planetGrid()` exists only because Tantros has `sectorSize=0` in its JSON
-and needs JS to dynamically create the grid.
+当星球 JSON 中设置 `sectorSize > 0` 时，Planet 构造函数自动创建星区网格。
+VE 的 `scripts/sectorSize.js` 中使用 `planetGrid()` 仅仅是因为 Tantros
+在 JSON 中 `sectorSize=0`，需要通过 JS 动态创建。
 
-For the Peony Pavilion planet with `"sectorSize": 2` in JSON, `planetGrid()`
-is unnecessary and would double-create sectors.
+对于牡丹亭星球（JSON 中 `"sectorSize": 2`），`planetGrid()` 完全不必要，
+且会造成重复创建。
 
-### Fix
+### 修复
 
-Removed `require("sectorSize")` from the `main.js` template. Added a note
-explaining when `planetGrid()` is needed (JSON `sectorSize=0`) vs when it
-is redundant (JSON `sectorSize > 0`).
+从 `main.js` 模板中移除 `require("sectorSize")`。添加注释说明
+`planetGrid()` 的使用场景（JSON `sectorSize=0`）与冗余场景（JSON `sectorSize > 0`）。
 
 
-## Working Constraints
+## 工作约束
 
-| Item | Value |
+| 项目 | 值 |
 |---|---|
-| Mindustry version | v8+ (minGameVersion: 146) |
-| Mod type | JS + JSON |
-| Source paths | `Factory/Mindustry/`, `Factory/Arc/` |
-| Reference mod | Vanilla Expansion 2.1.1.1 (`Factory/ref/Vanilla-Expansion-Mod-2111/`) |
-| Mod repository | `github.com/BassttElSevic/ThePeonyPavilion` |
-| Development directory | `Factory/ThePeonyPavilion/` |
-| Import method | GitHub import (NOT symlink) |
+| Mindustry 版本 | v8+ (minGameVersion: 146) |
+| Mod 类型 | JS + JSON |
+| 源码路径 | `Factory/Mindustry/`, `Factory/Arc/` |
+| 参考模组 | Vanilla Expansion 2.1.1.1 (`Factory/ref/Vanilla-Expansion-Mod-2111/`) |
+| Mod 仓库 | `github.com/BassttElSevic/ThePeonyPavilion` |
+| 开发目录 | `Factory/ThePeonyPavilion/` |
+| 导入方式 | GitHub 导入（禁止软链接） |
 
 
-## Final State After All Fixes
+## 最终状态
 
 ```
-[OK] Mod loads: green enabled
-[OK] main.js: "Peony Pavilion Mod loaded"
-[OK] Planet peony-pavilion: parsed, parent=sun, visible in campaign/sandbox
-[--] Sector crash-site: deferred, waiting for .msav map creation
+[OK] Mod 加载: 绿色 enabled
+[OK] main.js: "牡丹亭 Mod 已加载"
+[OK] 星球 peony-pavilion: 解析成功，挂在原版 sun 下，战役/沙盒模式可见
+[--] 星区 crash-site: 暂缓，等待 .msav 地图文件创建
 ```
