@@ -1,0 +1,35 @@
+# --- 操作系统生成 ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- 编辑器 / IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# --- Java / Gradle 构建产物（如果将来用 Java 写模组）---
+build/
+bin/
+out/
+*.class
+*.jar
+!gradle-wrapper.jar
+
+# --- Node.js（如果将来用 TypeScript 写脚本）---
+node_modules/
+*.tsbuildinfo
+
+# --- Mindustry 解包/导出的原始游戏资源 ---
+# 如果你从原版游戏解包了 assets 做参考，不要提交
+assets-raw/
+
+# --- 临时文件 ---
+*.tmp
+*.bak
+*.log
