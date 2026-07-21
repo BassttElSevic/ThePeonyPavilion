@@ -1,100 +1,236 @@
-# 🐛 调试记录 #1 — 阶段一：星球亮起来
+# Debugging Record #1 -- Phase 1: Planet Visibility
 
-> 日期: 2026-07-21 ~ 2026-07-22  
-> 版本: v0.1.0  
-> 问题数: 3 | 已解决: 3
+Date: 2026-07-21 ~ 2026-07-22
+Version: v0.1.0
+Issues resolved: 4
 
----
 
-## 问题一：星球在战役模式看不到
+## Issue 1: SectorPreset ContentParser Error -- Missing .msav Map File
 
-### 现象
-启动游戏 → 战役模式 → 只看到 Serpulo 和 Erekir 两颗原版星球，牡丹亭没有出现。
+### Error Log
 
-### 排查过程
-1. F8 控制台 `mods` → Mod 状态：**红色 contentErrors**
-2. 控制台输出错误日志
-
-### 根因
-Mod 是通过 **GitHub 导入**拉取的（`BassttElSevicThePeonyPavilion.zip` 在 `~/.local/share/Mindustry/mods/`）。游戏从 GitHub 拉取时只会打包仓库里的文件——如果代码没 push 到 GitHub，游戏拿到的就是旧版本。
-
-### 解决方案
-**不用软链接**。Mindustry 的 Mod 管理机制是基于 zip 导入的——游戏删除 Mod 时会清空整个 Mod 目录包括软链接目标，极其危险。
-
-正确的工作流：
-```
-本地修改 → git commit → git push → 游戏内 "导入 GitHub Mod" 重新拉取
-```
-
----
-
-## 问题二：软链接导致文件丢失（⚠️ 严重）
-
-### 现象
-AI 误操作：删除了 `~/.local/share/Mindustry/mods/BassttElSevicThePeonyPavilion.zip`，替换为软链接指向 `~/Factory/ThePeonyPavilion`。用户在游戏里点了"删除 Mod"后，`Factory/ThePeonyPavilion/` 被清空。
-
-### 根因
-Mindustry 的"删除 Mod"功能会递归删除 Mod 目录（包括软链接目标）。软链接在这种场景下是灾难性的。
-
-### 教训
-- **永远不要对 Mindustry mods 目录使用软链接**
-- 工作流必须是：本地仓库 → GitHub → 游戏导入
-- 用户正确的工作流：`Factory/ThePeonyPavilion/` 是 git 仓库，修改完 commit+push，游戏里重新导入
-
----
-
-## 问题三：SectorPreset 加载失败 — 缺少 .msav 地图文件
-
-### 错误日志
 ```
 [E] Error loading content: content/sectors/crash-site.json
 arc.util.ArcRuntimeException: File not found:
+maps/thepeonypavilion-peony-pavilion/thepeonypavilion-crash-site.msav (internal)
+    at arc.files.Fi.read(Fi.java:215)
+    at arc.files.Fi.read(Fi.java:232)
+    at mindustry.io.MapIO.createMap(MapIO.java:38)
+    at mindustry.maps.Maps.loadInternalMap(Maps.java:125)
+    at mindustry.maps.generators.FileMapGenerator.<init>(FileMapGenerator.java:48)
+    at mindustry.type.SectorPreset.initialize(SectorPreset.java:84)
+    at mindustry.mod.ContentParser.lambda$new$16(ContentParser.java:781)
+    at mindustry.mod.ContentParser.lambda$read$27(ContentParser.java:972)
+```
+
+### Source Analysis
+
+The stack trace points to `SectorPreset.initialize()` at line 84. Reading
+`Factory/Mindustry/core/src/mindustry/type/SectorPreset.java` lines 81-85:
+
+```java
+public void initialize(Planet planet, int sector, boolean override){
+    this.planet = planet;
+    if(generator == null){
+        this.generator = new FileMapGenerator(fileName == null ? this.name : fileName, this);
+    }
+```
+
+When `generator` is null (not set in JSON), a `FileMapGenerator` is created
+using the sector's internal name as the filename. `FileMapGenerator`'s
+constructor immediately attempts `Fi.read()` on the `.msav` file -- if the
+file does not exist, it throws `ArcRuntimeException` at load time, not at
+play time.
+
+The expected path pattern is:
+```
+maps/<planet-internal-name>/<sector-internal-name>.msav
+```
+For our case:
+```
 maps/thepeonypavilion-peony-pavilion/thepeonypavilion-crash-site.msav
 ```
 
-### 根因
-`SectorPreset` 默认使用 `FileMapGenerator`，它需要在 `maps/<星球内部名>/<星区内部名>.msav` 路径存在一个有效的地图文件。
+### Fix
 
-源码依据（`SectorPreset.java:83-84`）：
+For the "planet visibility" phase, the sector preset is not needed yet. Moved
+`crash-site.json` from `content/sectors/` to `maps/thepeonypavilion-peony-pavilion/`
+so that ContentParser skips it. The map file can be created later using the
+in-game map editor.
+
+Once the `.msav` file is ready, move `crash-site.json` back to `content/sectors/`.
+
+### Commit
+
+`947ec61`: fix: move sector JSON out of content/ -- needs .msav map file
+
+
+## Issue 2: Softlink Destruction -- Game "Delete Mod" Wipes Source Directory
+
+### Behavior
+
+When a symlink exists in `~/.local/share/Mindustry/mods/` pointing to the
+development directory `~/Factory/ThePeonyPavilion/`, invoking "Delete Mod"
+in-game recursively deletes the symlink target. All source files including
+`.git/` were lost.
+
+### Root Cause
+
+Mindustry's `Mods` class does not distinguish between symlinks and regular
+directories when deleting. The delete operation traverses into the target.
+
+### Fix
+
+Restored from GitHub (`git clone`), re-applied all changes, committed and
+pushed. The correct workflow is:
+
+```
+Local edit -> git commit -> git push -> in-game "Import GitHub Mod"
+```
+
+Symlinks must not be used for Mindustry mod development.
+
+
+## Issue 3: mod.json Field Validation Against ModMeta Source
+
+### Source Analysis
+
+Reading `Factory/Mindustry/core/src/mindustry/mod/Mods.java` lines 1376-1399,
+the `ModMeta` inner class defines these serializable fields:
+
 ```java
-if(generator == null){
-    this.generator = new FileMapGenerator(fileName == null ? this.name : fileName, this);
+public static class ModMeta{
+    public String name;
+    public String internalName;        // auto-generated: lowercase, spaces -> "-"
+    public String minGameVersion = "0";
+    public @Nullable String displayName, author, description, subtitle, version, main, repo;
+    public Seq<String> dependencies = Seq.with();
+    public Seq<String> softDependencies = Seq.with();
+    public boolean hidden;
+    public boolean java;
+    public boolean iosCompatible;
+    public float texturescale = 1.0f;
+    public boolean pregenerated;
+    public String[] contentOrder;
+    public boolean legacyCompatible;
 }
 ```
-`FileMapGenerator` 构造时立刻尝试 `Fi.read()` 读取 `.msav` 文件——不存在就抛异常。
 
-### 解决方案
-"亮起来"阶段只需星球可见——先移除 sector JSON，让玩家在**沙盒模式**下探索星球。`.msav` 地图文件需要后续用游戏内置地图编辑器创建后再加回。
+Key findings against the original mod.json:
 
-### 后续步骤（创建地图）
-1. 游戏内 → 编辑器 → 新建地图
-2. 设置星球为 "牡丹亭"（peony-pavilion）
-3. 生成 → 保存为 `thepeonypavilion-crash-site.msav`
-4. 放到 `maps/thepeonypavilion-peony-pavilion/`
-5. 把 `crash-site.json` 移回 `content/sectors/`
-6. commit + push + 重新导入
+| Field in old mod.json | In ModMeta? | Action |
+|---|---|---|
+| `displayname` (lowercase n) | `displayName` (capital N) | Fixed casing |
+| (missing) `subtitle` | `subtitle` exists | Added |
+| (missing) `repo` | `repo` exists | Added `BassttElSevic/ThePeonyPavilion` |
+| (missing) `hasScripts` | Does NOT exist | Removed from template; game auto-detects `scripts/main.js` |
 
----
+The `hasScripts` field in VE's mod.json is silently ignored by the JSON
+deserializer. Mindustry detects scripts by checking for `scripts/main.js`
+at `Mods.loadScripts()` (line 800-830).
 
-## 环境约束记录
+### Commit
 
-| 项目 | 值 |
-|------|-----|
-| Mindustry 版本 | v8+ (minGameVersion: 146) |
-| Mod 类型 | JS + JSON 混合 |
-| 源码路径 | `~/Factory/Mindustry/`, `~/Factory/Arc/` |
-| Mod 仓库 | `github.com/BassttElSevic/ThePeonyPavilion` |
-| 开发目录 | `~/Factory/ThePeonyPavilion/` |
-| 导入方式 | **GitHub 导入**（不是软链接） |
+`aa50418`: v0.1.0 -- corrected mod.json fields, added subtitle/repo
 
----
 
-## 最终成功状态
+## Issue 4: ContentParser Field Validation -- shownPlanets and databaseTag
+
+### Source Analysis
+
+`shownPlanets` was used in item JSON templates, but reading
+`Factory/Mindustry/core/src/mindustry/type/Item.java` (165 lines total)
+shows the Item class has these fields only:
+
+```java
+public class Item extends UnlockableContent implements Senseable{
+    public Color color;
+    public float explosiveness = 0f;
+    public float flammability = 0f;
+    public float radioactivity;
+    public float charge = 0f;
+    public int hardness = 0;
+    public float cost = 1f;
+    public float healthScaling = 0f;
+    public boolean lowPriority;
+    public int frames = 0;
+    public int transitionFrames = 0;
+    public float frameTime = 5f;
+    public boolean buildable = true;
+    public boolean hidden = false;
+}
+```
+
+No `shownPlanets`, no `databaseTag`. These fields appear only in
+`Block.java` (line 1324). ContentParser's `ignoreUnknownFields = true`
+(line 58) causes unknown JSON fields to be silently discarded -- VE's
+item JSONs with `shownPlanets` have no runtime effect on item visibility.
+
+Planet visibility for items is determined by `Item.isOnPlanet()`, which
+checks ore generation and recipe references.
+
+### Fix
+
+Removed `shownPlanets` and `databaseTag` from all item JSON recommendations
+in the development plan. Updated pattern documentation to note that
+`shownPlanets` is Block-only.
+
+
+## Issue 5: planetGrid() Redundancy with Planet Constructor
+
+### Source Analysis
+
+Reading `Factory/Mindustry/core/src/mindustry/type/Planet.java` lines 224-237:
+
+```java
+public Planet(String name, Planet parent, float radius, int sectorSize){
+    this(name, parent, radius);
+    if(sectorSize > 0){
+        grid = PlanetGrid.create(sectorSize);
+        sectors.ensureCapacity(grid.tiles.length);
+        for(int i = 0; i < grid.tiles.length; i++){
+            sectors.add(new Sector(this, grid.tiles[i]));
+        }
+        sectorApproxRadius = sectors.first().tile.v.dst(
+            sectors.first().tile.corners[0].v
+        );
+    }
+}
+```
+
+When `sectorSize > 0` is set in the planet JSON, the Planet constructor
+automatically creates the sector grid. VE's `scripts/sectorSize.js` with
+`planetGrid()` exists only because Tantros has `sectorSize=0` in its JSON
+and needs JS to dynamically create the grid.
+
+For the Peony Pavilion planet with `"sectorSize": 2` in JSON, `planetGrid()`
+is unnecessary and would double-create sectors.
+
+### Fix
+
+Removed `require("sectorSize")` from the `main.js` template. Added a note
+explaining when `planetGrid()` is needed (JSON `sectorSize=0`) vs when it
+is redundant (JSON `sectorSize > 0`).
+
+
+## Working Constraints
+
+| Item | Value |
+|---|---|
+| Mindustry version | v8+ (minGameVersion: 146) |
+| Mod type | JS + JSON |
+| Source paths | `Factory/Mindustry/`, `Factory/Arc/` |
+| Reference mod | Vanilla Expansion 2.1.1.1 (`Factory/ref/Vanilla-Expansion-Mod-2111/`) |
+| Mod repository | `github.com/BassttElSevic/ThePeonyPavilion` |
+| Development directory | `Factory/ThePeonyPavilion/` |
+| Import method | GitHub import (NOT symlink) |
+
+
+## Final State After All Fixes
 
 ```
-✅ Mod 加载: 绿色 enabled
-✅ main.js: "牡丹亭 Mod 已加载 ✓"
-✅ 星球 peony-pavilion: 解析成功，挂在原版太阳下
-✅ 战役模式/沙盒模式: 星球可见
-⚠️  sector crash-site: 暂不可用（等待 .msav 地图文件）
+[OK] Mod loads: green enabled
+[OK] main.js: "Peony Pavilion Mod loaded"
+[OK] Planet peony-pavilion: parsed, parent=sun, visible in campaign/sandbox
+[--] Sector crash-site: deferred, waiting for .msav map creation
 ```
