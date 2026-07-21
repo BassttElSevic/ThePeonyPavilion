@@ -10,3 +10,8 @@
 
 希望，*你不再孤单，愿你不再孤单*
 
+本项目仓库地址在：
+
+https://github.com/BassttElSevic/ThePeonyPavilion.git
+
+~~**QwQ**~~
