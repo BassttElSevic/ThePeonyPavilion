@@ -5,10 +5,130 @@
 > **涉及源码**:
 > - `mindustry/graphics/g3d/PlanetRenderer.java`
 > - `mindustry/graphics/g3d/NoiseMesh.java`
+> - `mindustry/graphics/g3d/HexMesh.java`
+> - `mindustry/graphics/g3d/HexMesher.java`
 > - `mindustry/graphics/g3d/MeshBuilder.java`
 > - `mindustry/graphics/g3d/MultiMesh.java`
 > - `mindustry/graphics/g3d/PlanetMesh.java`
 > - `mindustry/mod/ContentParser.java`
+> - `core/assets/shaders/planet.vert`
+> - `core/assets/shaders/planet.frag`
+
+---
+
+## 〇、星球为什么不是单色的——多层 Mesh 复合渲染的本质
+
+> 这一章回答四个最根本的问题，它们恰好是上一版文档"看似都讲了、实则没讲透"的部分：
+> 1. 星球是如何看上去有不同色彩的，而不是单色的？
+> 2. 为什么渲染不同的 mesh 可以实现这个效果？
+> 3. 这和我们 JSON 的关系又是什么？
+> 4. 为什么我们的 JSON 这么写，可以实现？
+>
+> 读完这一章再看后面的管线详解，你就知道每一段代码在整个方案中的位置。
+
+### 0.1 问题：如何让一个 3D 球体看起来像一颗星球？
+
+给你一个光秃秃的 3D 球体。你想要它看起来像地球——有蓝色的海洋、绿色的大陆、黄色的沙漠、白色的雪山。你能怎么做？
+
+**方案 A：纹理贴图（Texture Mapping）。** 找一位美术画一张地球的 2D 图片，像包橘子皮一样包在球体表面上。这是大多数 3D 游戏的做法。问题是：Mindustry 是一个 **mod 驱动的游戏**，modder 通过 JSON 配置文件定义星球外观，没有美术资源。而且纹理贴图需要做 UV 展开（把 3D 球面摊平成 2D 平面），对程序化生成极不友好。
+
+**方案 B：多层 Mesh 叠加（Multi-Layer Mesh Compositing）。** 把"地球"拆成 5 个独立的球体——一个纯蓝的海洋球、一个绿斑块的大陆球、一个黄斑块的沙漠球、一个灰斑块的山脉球、一个白斑块的雪峰球。把它们叠在一起同时渲染，用 GPU 的深度测试自动决定每个像素显示哪一层的颜色。这就是 Mindustry 的选择。
+
+方案的 B 的核心优势：
+- **纯 JSON 可配置**：不需要任何图片资源，modder 只需写 JSON 字段
+- **程序化生成**：每个"斑块"的形状由 Simplex 噪声在运行时计算——无限变化，零存储成本
+- **逐层独立可控**：海洋覆盖多少、沙漠稀疏程度、山脉高度……每层单独调参
+
+### 0.2 Mindustry 的选择：多层 Mesh 叠加渲染
+
+在 Mindustry 中，一个星球的视觉外观由 **N 个独立的 3D Mesh** 叠加而成。每个 Mesh 本身是一个**完整的球体**（经过噪声变形），拥有自己的顶点和顶点颜色。GPU 在渲染时按顺序绘制这些球体，深度测试（Depth Test）自动决定每个屏幕像素最终显示哪一层的颜色。
+
+把每一层想象成一张有洞的"壳"：
+
+```
+          摄像机
+            ↓
+    ╔═══════════════╗  ← 第5层：山脉白（大部分区域凹陷，只有噪声极值处凸出）
+    ║ ╔═══════════╗ ║  ← 第4层：山脉灰
+    ║ ║ ╔═══════╗ ║ ║  ← 第3层：沙漠
+    ║ ║ ║ ╔═══╗ ║ ║ ║  ← 第2层：森林
+    ║ ║ ║ ║   ║ ║ ║ ║  ← 第1层：海洋（完整球体，最内层）
+    ║ ║ ║ ╚═══╝ ║ ║ ║
+    ║ ║ ╚═══════╝ ║ ║
+    ║ ╚═══════════╝ ║
+    ╚═══════════════╝
+```
+
+图中每一条竖线代表屏幕上的一个像素列。摄像机从上方看下来：
+- 最左边的像素列穿过了所有 5 层 → GPU 显示第 5 层（山脉白）的颜色（它最靠近摄像机）
+- 中间的像素列穿过了第 1-4 层但第 5 层在那里凹陷了 → 显示第 4 层（山脉灰）
+- 右边的像素列穿过了第 1-2 层但第 3-5 层都凹陷了 → 显示第 2 层（森林）
+- 最右边的像素列只穿过了第 1 层 → 显示第 1 层（海洋）
+
+**GPU 端的具体机制**：深度测试（Depth Test）。渲染第 1 层（海洋）时，GPU 把所有海洋顶点的深度值写入深度缓冲。渲染第 2 层（森林）时，GPU 逐个像素比较：森林的这个像素比深度缓冲中已有的海洋像素更近（距离摄像机更近）吗？是 → 绘制并更新深度缓冲。否 → 丢弃。这个机制在硬件层面执行，不需要任何额外的代码逻辑。
+
+### 0.3 每一层的颜色从哪来？
+
+每一层是一个 NoiseMesh。NoiseMesh 在被构造时遍历球面上的每一个顶点，对每个顶点调用 `getColor()` 回调：
+
+- **单色模式**（只写了 `"color"` 字段）：所有顶点同一种颜色。海洋层用这个——整层纯蓝。
+- **双色模式**（写了 `"color1"` 和 `"color2"`）：对每个顶点，用 **另一组独立噪声** 计算一个标量值。若大于 `colorThreshold` → 用 `color2`（亮色）。否则 → 用 `color1`（暗色）。
+
+因为噪声值在空间上是**平滑连续**的（相邻顶点的噪声值相近），所以产生的颜色斑块不是随机的胡椒盐噪点，而是**有机形状的色块**——像地球上蜿蜒的大陆和散落的岛屿。
+
+这就是为什么 `colorScale`（控制色块尺寸）和 `colorThreshold`（控制亮暗比例）这两个参数如此重要：它们直接决定了每一层"大陆的形状"。
+
+### 0.4 这与我们的 JSON 有什么关系？
+
+看我们的 `peony-pavilion.json` 的 `"mesh"` 字段：
+
+```jsonc
+"mesh": {
+    "type": "MultiMesh",          // ← 这是容器：告诉游戏"我要叠多层"
+    "meshes": [                   // ← 这个数组定义了叠加的每一层
+        { "type": "NoiseMesh", "seed": 42,  "color": "1050a0",     "radius": 0.7, "mag": 0.30 },
+        { "type": "NoiseMesh", "seed": 77,  "color1": "1d7a28", …, "radius": 0.7, "mag": 0.30 },
+        { "type": "NoiseMesh", "seed": 131, "color1": "b8a050", …, "radius": 0.7, "mag": 0.18 },
+        { "type": "NoiseMesh", "seed": 199, "color1": "7a7a7a", …, "radius": 0.7, "mag": 0.22 },
+        { "type": "NoiseMesh", "seed": 241, "color1": "c0c8c080",…, "radius": 0.7, "mag": 0.20 }
+    ]
+}
+```
+
+这个 JSON 结构直接映射到 Mindustry 的对象模型：
+
+| JSON 路径 | Java 对象 | 职责 |
+|-----------|----------|------|
+| `mesh.type = "MultiMesh"` | `new MultiMesh(…)` | 容器，持有子 mesh 列表，渲染时逐层遍历 |
+| `mesh.meshes[i]` | `new NoiseMesh(…)` | 第 i 层地形——一个独立的 3D 球体 mesh |
+| `seed` | 噪声种子 | 决定该层地形和颜色的空间分布 |
+| `radius` | 球体半径 | 所有层必须相同（否则内层被完全遮挡，见坑 2） |
+| `mag` | 地形变形幅度 | 决定该层顶点能凸出多远——**后渲染的层 mag 递减** |
+| `color1`/`color2` | 暗色/亮色 | 同一层内部的颜色变体 |
+| `colorScale` | 色块空间尺度 | 越大色块越大（大陆状 vs 胡椒盐状） |
+| `colorThreshold` | 亮暗分界阈值 | 控制亮色（color2）占比 |
+
+### 0.5 所以，为什么 JSON 这样写就可以实现？
+
+把上面的所有机制串起来，就是我们 JSON 的设计逻辑：
+
+1. **外包装是 `MultiMesh`** → 因为星球需要多个视觉层叠加。`MultiMesh.render()` 只是 for 循环逐层渲染（见 2.3.3），没有任何魔法。
+
+2. **每层是 `NoiseMesh`** → 因为每个地形层需要独立的地形起伏和颜色纹理。`NoiseMesh` 用 Simplex 噪声同时驱动几何变形（`getHeight()`）和颜色选择（`getColor()`），产生有机、不规则的外观。
+
+3. **所有层 `radius` 相同（0.7）** → 这是坑 2 血泪教训的核心结论。`radius` 是等比缩放因子，逐层递减会导致内层顶点全部小于外层，深度测试把内层完全丢弃。相同 radius 意味着每层的基础球体一样大，只有噪声推动的局部凹凸决定谁在谁之上。
+
+4. **`mag` 值总体递减** → `mag` 控制噪声能推多远。海洋 `mag=0.30`、森林 `mag=0.30`（同级竞争 50/50），沙漠 `mag=0.18`（只在噪声极高处穿透）、山脉 `mag=0.22/0.20`。后渲染的层 mag 较小 → 大部分区域它们在前层几何体之内（被遮挡）→ 只在噪声峰值处"刺穿"前层。这创造了稀疏可见的高地地形，就像地球上沙漠和雪山只覆盖少部分区域一样。
+
+5. **`seed` 各不相同** → 如果两层 seed 相同，它们的噪声分布完全重合，凸起和凹陷的地理位置一模一样，等于两层完美对齐——后渲染的层会均匀覆盖前层，失去"斑块穿透"的效果。不同 seed 意味着每层的地形特征在不同的地理位置出现。
+
+6. **`colorScale` 递增（3→5→7→9）** → 海洋到雪山，色块从碎到整。低层（森林）用小块色斑模拟破碎的海岸线和零散植被，高层（雪峰）用大块色斑模拟成片的高原积雪。
+
+7. **`color1`/`color2` 始终是同一色系的亮暗变体** → 森林的 `"1d7a28"`（深绿）→ `"3db840"`（亮绿），沙漠的 `"b8a050"`（土黄）→ `"d0c068"`（亮黄）。同一层内颜色只在亮度/饱和度上变化，色相不变，所以视觉上"这一层是一种地形"的感知统一。
+
+8. **渲染顺序就是 JSON 数组顺序** → 索引 0（海洋）最先渲染 → 写入深度缓冲。索引 1（森林）其次 → 在噪声高处覆盖海洋。索引 4（山脉白）最后渲染 → 只在所有前层都凹陷的位置可见（三层独立噪声的联合最大值，概率极低，所以雪山最稀有）。
+
+**一句话总结**：我们通过 JSON 定义了一个"5 层球壳"的配置——每层有独立的地形起伏（`seed` + `mag`）和颜色纹理（`color1`/`color2` + `colorScale` + `colorThreshold`）。Mindustry 在启动时把 JSON 解析为 5 个 NoiseMesh 对象，包在一个 MultiMesh 容器里。运行时每一帧，MultiMesh 逐层提交给 GPU，深度测试自动完成"哪些像素显示哪层颜色"的判断——产生地球般的多层地形视觉效果。
 
 ---
 
@@ -20,7 +140,7 @@
 
 ## 二、星球渲染管线详解
 
-> 这一章的目标：从你写的 JSON 出发，追踪到 GPU 如何画出屏幕上的每一个像素。读完它，你就能理解为什么某个参数调大或调小会产生特定的视觉效果。
+> 这一章从你写的 JSON 出发，追踪到 GPU 如何画出屏幕上的每一个像素。前面第〇章给出了全景图；这一章是对全景图每一帧的显微放大。
 
 ### 2.0 在开始读源码之前：必须理解的基础概念
 
@@ -53,6 +173,8 @@
 **回调（Callback）**：把一个方法（函数）的引用作为参数传给另一个方法，后者在需要时调用前者。Mindustry 在 NoiseMesh 的构造函数中大量使用这种模式——把匿名函数传给 `MeshBuilder`，后者遍历球面所有顶点时逐个调用这些函数。
 
 **MVP 矩阵（Model-View-Projection Matrix）**：三个 4×4 变换矩阵的乘积——(1) Model 矩阵：把顶点从物体坐标系变换到世界坐标系；(2) View 矩阵：从世界坐标系变换到摄像机坐标系；(3) Projection 矩阵：从摄像机坐标系投影到屏幕像素坐标。在 Mindustry 星球渲染中，MultiMesh 的所有子层共享同一个 MVP 矩阵（因为它们同属一个星球）。
+
+**HexMesher 接口**：`MeshBuilder` 与星球噪声层之间的**契约**。它定义了四个回调方法——`getHeight()`（顶点几何高度）、`getColor()`（顶点颜色）、`getEmissiveColor()`（自发光颜色）、`skip()`（跳过该顶点）。NoiseMesh 通过匿名内部类实现这个接口，把 Simplex 噪声注入到 `MeshBuilder` 的网格构建流程中。
 
 ---
 
@@ -99,7 +221,7 @@ private GenericMesh parseMesh(Planet planet, JsonValue data){
 }
 ```
 
-**这段代码告诉我们 5 件事：**
+**这段代码告诉我们 6 件事：**
 
 **① `type` 字段决定构造哪种 Mesh。** 不写 `"type"` 默认就是 `NoiseMesh`。云层用 `HexSkyMesh`（一个 getColor 函数内判断噪声值是否超过阈值的六边形 mesh），太阳用 `SunMesh`。
 
@@ -113,6 +235,8 @@ private GenericMesh parseMesh(Planet planet, JsonValue data){
 **④ 每个 JSON 字段都有默认值。** `data.getFloat("radius", 1f)` 中的第二个参数 `1f` 就是默认值。这意味着哪怕 JSON 只写 `{}`，也会构造出一个可用的 NoiseMesh（半径 1.0，白色，mag=0.5）。
 
 **⑤ `parseMesh()` 是递归的。** 当 JSON 中 `"type": "MultiMesh"` 时，代码会新建 `MultiMesh`，然后递归调用 `parseMeshes()` 解析 `"meshes"` 数组中的每一项。你的 JSON 正是这样：外层是一个 MultiMesh，内层 5 个 NoiseMesh 逐个递归构造。
+
+**⑥ 两个 `parseMesh` 签名通过重载自动切换。** 当 `data.isArray()` 为 true 时走数组分支（直接返回 MultiMesh），否则走单对象分支（按 `type` 字段分发）。这意味着 `"mesh"` 也可以是单层 NoiseMesh（对于简单星球），但你选择了数组写法——因为我们需要 5 层地形。
 
 ---
 
@@ -229,6 +353,8 @@ public static synchronized Mesh buildHex(
 顶点到球心的距离 = (1 + noise3d × mag × 0.2) × radius
 ```
 
+**这个公式有一个极易被误读的关键性质**：`1` 是加法项（噪声在此之上增减），但 `radius` 是乘法项（等比缩放整体）。这意味着**两个不同 radius 的球体无法通过噪声的凹凸来"相互穿透"**——radius 较小的层的噪声极值顶点仍然小于 radius 较大的层的噪声极小值顶点（当 mag 差距不大时）。
+
 **这个公式的各个部分：**
 
 | 符号 | 值来源 | 含义 | 为什么存在 |
@@ -256,6 +382,34 @@ public static synchronized Mesh buildHex(
 ```
 
 沙漠层最外顶点 0.719 < 森林层最外顶点 0.755。意味着沙漠层的**每一个顶点**都在森林层的球体内。GPU 的深度测试（见 2.3.1）会发现沙漠层的所有像素都比已绘制的森林层像素更远——全部丢弃。
+
+#### 2.2.4 顶点颜色的计算：`getColor()` 的回调在何处被调用
+
+回到 `MeshBuilder.buildHex()` 的后续代码。当所有 heights 计算完毕，代码遍历每个六边形 tile（由 PlanetGrid 生成），提取它的 corner 顶点：
+
+```java
+for(Ptile tile : grid.tiles){
+    Corner[] c = tile.corners;
+
+    // ...计算三角形法线...
+
+    tmpCol.set(1f, 1f, 1f, 1f);
+    mesher.getColor(tile.v, tmpCol);   // ← 在这里调用 getColor 回调
+    float color = tmpCol.toFloatBits();
+
+    // 把 corner 顶点位置（heights[corner.id] × corner.v）和颜色写入 GPU 缓冲
+    for(var corner : c){
+        float height = heights[corner.id];
+        vert(mesh, floats,
+             corner.v.x * height,      // 顶点 X = 方向向量 X × 距离
+             corner.v.y * height,      // 顶点 Y = 方向向量 Y × 距离
+             corner.v.z * height,      // 顶点 Z = 方向向量 Z × 距离
+             nor, color, emissive);
+    }
+}
+```
+
+注意：`getColor()` 以 tile 的**中心方向向量** `tile.v` 为参数，但同一个 tile 的所有 corner 顶点共享同一个颜色。这是性能折中——减少颜色采样次数（一个六边形 tile 一次 vs 每个顶点一次）。
 
 ---
 
@@ -385,19 +539,76 @@ public void preRender(PlanetParams params){
 
 光照方向决定了每个像素的明暗——面向光源的像素更亮，背向光源的更暗。因此**星球的背面总是比正面暗**，这不是 JSON 参数能控制的。
 
-#### 2.4.2 Fragment Shader 中的颜色计算（概念层面）
+#### 2.4.2 Vertex Shader 中的实际计算（`planet.vert`）
 
-Mindustry 的星球 fragment shader 大致做以下计算（简化）：
+以下是 Mindustry 星球 vertex shader 的完整源码（`core/assets/shaders/planet.vert`）：
 
+```glsl
+attribute vec4 a_position;      // 顶点位置 → 来自 MeshBuilder 的 heights × corner.v
+attribute vec3 a_normal;        // 顶点法线 → 来自 MeshBuilder 的 normal() 计算
+attribute vec4 a_color;         // 顶点颜色 → 来自 NoiseMesh 的 getColor() 回调
+attribute vec4 a_emissive;      // 自发光颜色 → 来自 getEmissiveColor()，默认 (0,0,0,0)
+
+uniform mat4 u_proj;            // 投影矩阵 → PlanetMesh.render() 设置
+uniform mat4 u_trans;           // 变换矩阵 → PlanetMesh.render() 设置
+uniform vec3 u_lightdir;        // 光照方向 → HexMesh.preRender() 计算
+uniform vec3 u_camdir;
+uniform vec3 u_campos;
+uniform vec3 u_ambientColor;    // 环境光颜色 → 来自太阳
+uniform float u_emissive;
+
+varying vec4 v_col;             // 输出给 fragment shader 的最终颜色
+
+const vec3 diffuse = vec3(0.01);
+
+void main(){
+    vec3 specular = vec3(0.0, 0.0, 0.0);
+
+    vec3 lightReflect = normalize(reflect(a_normal, u_lightdir));
+    vec3 vertexEye = normalize(u_campos - (u_trans * a_position).xyz);
+
+    float albedo = 1.0 - a_color.a;
+
+    float specularFactor = dot(vertexEye, lightReflect);
+    if(specularFactor > 0.0){
+        specular = vec3(1.0 * pow(specularFactor, 40.0)) * albedo;
+    }
+
+    vec3 norc = (u_ambientColor + specular) *
+                (diffuse + vec3(clamp((dot(a_normal, u_lightdir) + 1.0) / 2.0, 0.0, 1.0)));
+
+    float emissive = a_emissive.a * u_emissive *
+                     min(pow(max(0.0, (1.0 - norc.r) * 1.2), 3.0), 1.1);
+
+    v_col = vec4(mix(a_color.rgb, a_emissive.rgb, emissive), 1.0) *
+            vec4(mix(norc, vec3(1.0), emissive), 1.0);
+
+    gl_Position = u_proj * u_trans * a_position;
+}
 ```
-最终像素颜色 = 顶点颜色 × (环境光 + 漫反射光照)
-              │            │         │
-              │            │         └─ max(0, 法线方向 · 光照方向) × 光源颜色
-              │            └─ 全局环境光（暗面也不是全黑的）
-              └─ 来自噪声层的 getColor() 回调
+
+**这个 shader 的逐行解读：**
+
+1. `albedo = 1.0 - a_color.a` — 颜色 alpha 通道越大，albedo（反照率）越小。我们 JSON 中的半透明颜色（如 `"c0c8c080"` 的 alpha=0x80≈0.5）会降低镜面高光，让该层更柔和。
+2. `specular` — 镜面高光。反射方向与视线方向越接近，高光越强。`pow(..., 40.0)` 的指数 40 产生了非常集中的高光点（闪亮的海洋表面）。
+3. `dot(a_normal, u_lightdir)` — 漫反射的核心：法线与光照方向的点积。面向光源 → 接近 1（亮）；背向光源 → 接近 -1（暗）。`(dot + 1.0) / 2.0` 把它映射到 [0, 1]。
+4. `norc`（normalized color）— 环境光 + 高光 乘以 漫反射。这是光照对颜色的整体调制。背光面 norc 很小 → 颜色被压暗。
+5. `v_col` — 最终输出到 fragment shader 的颜色。如果该层有自发光（`emissive > 0`），会在暗部产生发光效果（比如火山熔岩）。
+
+#### 2.4.3 Fragment Shader：直通
+
+```glsl
+// planet.frag
+varying vec4 v_col;
+
+void main(){
+    gl_FragColor = v_col;
+}
 ```
 
-这意味着你 JSON 中的颜色值在最终屏幕上会被"压暗"——背光面颜色值乘以约 0.2-0.3 的环境光系数。所以如果原始颜色本身就很暗（如坑 1 中的 `1a3a5c`），在背光面几乎变成黑色。
+Fragment shader 极其简单——只做直通。所有光照计算都在 vertex shader 完成，这是性能优化（顶点数远少于像素数）。
+
+**这意味着你 JSON 中的颜色值在最终屏幕上会被"压暗"**——背光面颜色值乘以 norc 系数（约 0.2-0.3 的环境光系数）。所以如果原始颜色本身就很暗（如坑 1 中的 `1a3a5c`），在背光面几乎变成黑色。
 
 ---
 
@@ -409,22 +620,32 @@ Mindustry 的星球 fragment shader 大致做以下计算（简化）：
   └→ ContentParser 解析 peony-pavilion.json
        │
        └→ parseMesh() 解析 "mesh" 字段
-           ├─ type=MultiMesh → new MultiMesh()
-           └─ 对 meshes[] 中每一项递归调用 parseMesh()
-               └→ new NoiseMesh(planet, seed, …, radius, …, mag, …, color1, color2, …, colorScale, colorThreshold)
-                   │
-                   ├─ 定义 getHeight() 回调：noise3d × mag
-                   ├─ 定义 getColor() 回调：
-                   │   单色 → 固定颜色
-                   │   两色 → noise3d > colorThreshold ? color2 : color1
-                   │
-                   └─ MeshBuilder.buildHex(mesher, divisions, radius, 0.2)
-                       ├─ 遍历球面所有顶点 (PlanetGrid 生成)
-                       ├─ 每个顶点：距离 = (1 + getHeight × 0.2) × radius
-                       ├─ 每个顶点：颜色 = getColor
-                       └─ 输出：GPU 顶点缓冲 (VBO)
+           ├─ data.isArray() → 不是数组（是对象，有 type 字段）
+           ├─ type="MultiMesh" → new MultiMesh(parseMeshes(data.get("meshes")))
+           │      └─ parseMeshes() 遍历 meshes 数组，每项递归调用 parseMesh()
+           │          └→ new NoiseMesh(planet, seed, …, radius, …, mag, …,
+           │                           color1, color2, …, colorScale, colorThreshold)
+           │              │
+           │              ├─ 选择构造函数：
+           │              │   color1==color2? → 单色变体（getColor 返回固定颜色）
+           │              │   color1!=color2? → 两色变体（getColor 用噪声阈值选择）
+           │              │
+           │              ├─ 定义 getHeight() 回调：noise3d × mag
+           │              ├─ 定义 getColor() 回调：
+           │              │   单色 → 固定颜色
+           │              │   两色 → noise3d > colorThreshold ? color2 : color1
+           │              │
+           │              └─ MeshBuilder.buildHex(mesher, divisions, radius, 0.2)
+           │                  ├─ PlanetGrid.create(divisions) → 生成六边形网格
+           │                  ├─ 遍历所有 corner 顶点：
+           │                  │   heights[i] = (1 + getHeight × 0.2) × radius
+           │                  ├─ 遍历所有 tile 六边形：
+           │                  │   ├─ getColor(tile.center) → 该 tile 的颜色
+           │                  │   ├─ 计算三角形法线
+           │                  │   └─ 把每个 corner 的 (位置, 法线, 颜色) 写入 VBO
+           │                  └─ 输出：GPU 顶点缓冲 (VBO)
 
-游戏运行时，每帧
+游戏运行时，每帧（~60fps）
   │
   └→ PlanetRenderer.render()
       ├─ Gl.clear(深度缓冲) + Gl.enable(深度测试) + Gl.depthMask(true)
@@ -438,13 +659,16 @@ Mindustry 的星球 fragment shader 大致做以下计算（简化）：
                       ├─ shader.bind() → 绑定 planet shader
                       └─ GPU 绘制三角形
                           │
-                          ├─ Vertex Shader:
+                          ├─ Vertex Shader (planet.vert):
                           │   ├─ 读取顶点位置 = (1+noise×mag×0.2)×radius
+                          │   ├─ 读取顶点颜色 = getColor() 回调的输出
                           │   ├─ 乘以 MVP 矩阵 → 屏幕坐标
-                          │   └─ 传递颜色和深度给 Fragment Shader
+                          │   ├─ 光照计算：漫反射 × (环境光 + 镜面高光)
+                          │   ├─ 颜色调制：a_color × 光照
+                          │   └─ 传递 v_col 给 Fragment Shader
                           │
-                          └─ Fragment Shader:
-                              ├─ 读取顶点颜色 × 光照(法线·光方向) → 有明暗的像素色
+                          └─ Fragment Shader (planet.frag):
+                              ├─ 直通 v_col → gl_FragColor
                               ├─ 深度测试：该像素深度 < 深度缓冲当前位置的值？
                               │   ├─ 是 → 绘制像素，写入深度缓冲
                               │   └─ 否 → 丢弃像素（被前面的层遮挡）
@@ -646,3 +870,298 @@ Mindustry 的星球 fragment shader 大致做以下计算（简化）：
 | 某色过多 | 该层 mag 过大 |
 | 某色完全不可见 | 该层 mag 过小，或被多层联合竞争压制 |
 | 亮色碎块多 | colorThreshold 太低 |
+
+---
+
+## 六、附：完整 JSON 与逐层参数讲解
+
+> 下面是 `peony-pavilion.json` 中 `"mesh"` 字段的完整内容。读完它，你应该能准确说出"这个 JSON 定义了多少层 mesh、每一层是什么、为什么参数这么写"。
+
+### 6.0 完整 JSON
+
+```jsonc
+"mesh": {
+    "type": "MultiMesh",
+    "meshes": [
+        // ═══════════════════════════════════════════
+        // 第1层：海洋基底 🌊
+        // ═══════════════════════════════════════════
+        {
+            "type": "NoiseMesh",
+            "planet": "peony-pavilion",
+            "seed": 42,
+            "color": "1050a0",
+            "divisions": 5,
+            "radius": 0.7,
+            "octaves": 7,
+            "persistence": 0.5,
+            "scale": 1.5,
+            "mag": 0.3
+        },
+        // ═══════════════════════════════════════════
+        // 第2层：绿色森林大陆 🌲
+        // ═══════════════════════════════════════════
+        {
+            "type": "NoiseMesh",
+            "planet": "peony-pavilion",
+            "seed": 77,
+            "color1": "1d7a28",
+            "color2": "3db840",
+            "divisions": 5,
+            "radius": 0.7,
+            "octaves": 6,
+            "persistence": 0.5,
+            "scale": 1.8,
+            "mag": 0.30,
+            "colorOct": 3,
+            "colorPersistence": 0.5,
+            "colorScale": 3.0,
+            "colorThreshold": 0.48
+        },
+        // ═══════════════════════════════════════════
+        // 第3层：黄色沙漠斑块 🏜️
+        // ═══════════════════════════════════════════
+        {
+            "type": "NoiseMesh",
+            "planet": "peony-pavilion",
+            "seed": 131,
+            "color1": "b8a050",
+            "color2": "d0c068",
+            "divisions": 5,
+            "radius": 0.7,
+            "octaves": 5,
+            "persistence": 0.5,
+            "scale": 2.2,
+            "mag": 0.18,
+            "colorOct": 2,
+            "colorPersistence": 0.5,
+            "colorScale": 5.0,
+            "colorThreshold": 0.62
+        },
+        // ═══════════════════════════════════════════
+        // 第4层：灰色山脉暗面 ⛰️
+        // ═══════════════════════════════════════════
+        {
+            "type": "NoiseMesh",
+            "planet": "peony-pavilion",
+            "seed": 199,
+            "color1": "7a7a7a",
+            "color2": "9a9a9a",
+            "divisions": 4,
+            "radius": 0.7,
+            "octaves": 4,
+            "persistence": 0.5,
+            "scale": 2.5,
+            "mag": 0.22,
+            "colorOct": 2,
+            "colorPersistence": 0.5,
+            "colorScale": 7.0,
+            "colorThreshold": 0.55
+        },
+        // ═══════════════════════════════════════════
+        // 第5层：白色山脉亮面/冰盖 🏔️
+        // ═══════════════════════════════════════════
+        {
+            "type": "NoiseMesh",
+            "planet": "peony-pavilion",
+            "seed": 241,
+            "color1": "c0c8c080",
+            "color2": "d8e0d860",
+            "divisions": 4,
+            "radius": 0.7,
+            "octaves": 3,
+            "persistence": 0.5,
+            "scale": 3.0,
+            "mag": 0.20,
+            "colorOct": 2,
+            "colorPersistence": 0.5,
+            "colorScale": 9.0,
+            "colorThreshold": 0.58
+        }
+    ]
+}
+```
+
+**一眼看出的结论**：`type: "MultiMesh"` 包裹了一个 `meshes` 数组，数组里有 **5 个元素**。每个元素 `type: "NoiseMesh"` → ContentParser 会为每个元素调用 `new NoiseMesh(...)` → 产生 5 个独立的 GPU Mesh → 运行时 MultiMesh 按 0→1→2→3→4 的顺序逐层渲染。这就是"五层 mesh"的来由。
+
+---
+
+### 6.1 逐层参数精讲
+
+> 对所有层通用的字段先说清楚：
+> - `"planet": "peony-pavilion"` — 关联到哪个星球（用于获取位置、自转等运行时数据）
+> - `"persistence": 0.5` — 分形噪声中相邻频率层的振幅衰减。0.5 是 Mindustry 标准值，不需调整
+> - `"colorPersistence": 0.5` — 颜色噪声的振幅衰减，同上
+
+---
+
+#### 第1层：海洋基底 🌊
+
+```jsonc
+{ "type": "NoiseMesh", "seed": 42, "color": "1050a0",
+  "divisions": 5, "radius": 0.7, "octaves": 7,
+  "persistence": 0.5, "scale": 1.5, "mag": 0.3 }
+```
+
+| 参数 | 值 | 为什么这么写 |
+|------|----|------------|
+| `type` | `NoiseMesh` | 需要程序化地形 + 顶点颜色 |
+| `seed` | `42` | 与其他层不同即可。42 是海洋专用种子——如果和森林 seed 相同，海洋和森林的凹凸地形完全重合，森林会均匀覆盖海洋，失去"大陆漂浮在海上"的效果 |
+| `color` | `1050a0` | **单色模式**。只写 `color` 不写 `color1`/`color2` → ContentParser 把 `color1` 和 `color2` 都设为同一个值 → 触发单色变体构造函数（`getColor()` 直接返回这个颜色，不经过噪声选择）。`#1050a0` 是中等饱和度的深蓝色——不偏绿（避免和森林混淆）、不偏紫（避免和原 AI 主题色混淆）、亮度适中（背光面也不会变全黑） |
+| `divisions` | `5` | 六边形细分等级。5 产生约 10,000+ 顶点，球面足够圆滑。海洋是最里层，顶点密度应该最高（它为后续所有层提供"基准球面"） |
+| `radius` | `0.7` | **所有层必须相同**（坑 2 的核心教训） |
+| `octaves` | `7` | 地形细节层数。7 层 octave 意味着海洋地形有丰富的波浪状起伏。海洋不需要太崎岖（那是山脉的工作），但也不能太平滑（否则森林层无处可"穿透"） |
+| `scale` | `1.5` | 噪声空间频率。1.5 比默认 1.0 略大 → 起伏更稀疏、更大块。让海洋的"盆地"和"脊线"尺度与森林层协调 |
+| `mag` | `0.3` | 顶点位移幅度。与森林层 **相同**（`mag=0.30`）→ 两个球体的噪声凹凸范围相同 → 在约 50% 的区域海洋高于森林、50% 的区域森林高于海洋 → 海绿各半（坑 4 纠正后的值） |
+
+**渲染时发生了什么**：第1层最先渲染。GPU 把整个海洋网格的深度值写满深度缓冲。之后每一层只有噪声值高于海洋对应位置噪声值的顶点才能穿透——那些位置显示后层颜色，其余位置保持海洋蓝色。
+
+---
+
+#### 第2层：绿色森林大陆 🌲
+
+```jsonc
+{ "type": "NoiseMesh", "seed": 77,
+  "color1": "1d7a28", "color2": "3db840",
+  "divisions": 5, "radius": 0.7, "octaves": 6,
+  "persistence": 0.5, "scale": 1.8, "mag": 0.30,
+  "colorOct": 3, "colorPersistence": 0.5,
+  "colorScale": 3.0, "colorThreshold": 0.48 }
+```
+
+| 参数 | 值 | 为什么这么写 |
+|------|----|------------|
+| `seed` | `77` | 不同于海洋的 42——两层噪声分布独立 → 森林的凸起和海洋的凸起在不同位置 → 产生"大陆嵌在海洋中"的镶嵌效果 |
+| `color1` | `1d7a28` | 深森林绿。RGB(29,122,40)——低亮度、中等饱和度的绿色，模拟茂密植被的暗面 |
+| `color2` | `3db840` | 亮森林绿。RGB(61,184,64)——比 color1 亮约 50%，模拟阳光下的植被。两色色相相同（绿色），只在亮度上变化 → 同一层内视觉统一 |
+| `mag` | `0.30` | **与海洋相同**。这是经过坑 4 校正后的值。最初 `mag=0.40` 导致绿色覆盖 ~75% 表面（森林噪声 ×0.40 > 海洋噪声 ×0.30 的概率太高）。降至 0.30 → 50/50 竞争 |
+| `colorScale` | `3.0` | 色块空间尺度。3.0 比默认 1.0 大三倍 → 色块从"胡椒盐碎点"变为"小型大陆"，产生可辨认的绿色陆地块。不宜更大——森林应该是破碎的（零散林地），不需要沙漠那样的整片色块 |
+| `colorThreshold` | `0.48` | 亮暗分界。0.48 < 0.5 → 约 52% 顶点用 `color2`（亮绿）、48% 用 `color1`（暗绿）。亮色略多使森林整体不显得阴沉 |
+| `colorOct` | `3` | 颜色噪声的 octaves。3 层叠加使亮暗边界有适度的锯齿状——模拟森林边缘的不规则形状 |
+| `octaves` | `6` | 地形 octaves 比海洋少 1 层，比沙漠多 1 层——地形复杂度在中位 |
+| `scale` | `1.8` | 比海洋 1.5 略大 → 森林的地形起伏稍稀疏、更大块，和海洋形成差异 |
+
+**渲染时发生了什么**：第2层在第1层之后渲染。深度缓冲已有海洋的所有深度值。森林的 `mag=0.30` 与海洋相同 → 在噪声值更高的位置（约 50%）覆盖海洋。在噪声值更低的位置海洋顶点更靠外 → 森林像素被深度测试丢弃 → 露出海洋蓝色。第0章的 ASCII 图中，第2层（森林）有时凸出覆盖海洋、有时凹陷露出海洋。
+
+---
+
+#### 第3层：黄色沙漠斑块 🏜️
+
+```jsonc
+{ "type": "NoiseMesh", "seed": 131,
+  "color1": "b8a050", "color2": "d0c068",
+  "divisions": 5, "radius": 0.7, "octaves": 5,
+  "persistence": 0.5, "scale": 2.2, "mag": 0.18,
+  "colorOct": 2, "colorPersistence": 0.5,
+  "colorScale": 5.0, "colorThreshold": 0.62 }
+```
+
+| 参数 | 值 | 为什么这么写 |
+|------|----|------------|
+| `seed` | `131` | 不同于前两层——沙漠只出现在地球上特定的地理位置，噪声分布必须独立 |
+| `color1` | `b8a050` | 土黄色。RGB(184,160,80)——中等亮度的暖黄色，模拟干旱荒漠 |
+| `color2` | `d0c068` | 亮沙色。RGB(208,192,104)——比 color1 更亮更黄，模拟阳光直射的沙丘亮面 |
+| `mag` | `0.18` | **远小于海洋/森林的 0.30**。这是沙漠层最关键的参数。mag=0.18 意味着沙漠噪声极值（±0.18）远小于海洋/森林（±0.30）。对任意一个球面位置，沙漠顶点高度超过海/绿顶点高度的概率约 15-20%（坑 3/4 校正后）。这恰好模拟了地球上沙漠只覆盖少部分陆地的事实 |
+| `colorScale` | `5.0` | 比森林的 3.0 更大 → 沙漠色块更大更连续，形成"撒哈拉式"的整片沙漠，而非零散斑点 |
+| `colorThreshold` | `0.62` | > 0.5 → 暗色（`color1`，土黄）占 62%，亮色（`color2`，亮沙）占 38%。沙漠整体偏暗黄色调，亮沙作为点缀 |
+| `octaves` | `5` | 比森林少 1 层——沙漠地形不需要太崎岖 |
+| `scale` | `2.2` | 比海洋/森林都大——沙漠起伏更稀疏、更平坦 |
+
+**为什么 mag=0.18 而不是 0.22？** 沙漠是"中间层"——它需要同时穿透海洋和森林才能被看到。如果 mag 过大（如坑 3 的 0.45），沙漠会像葱花一样撒满球面，不像地球。0.18 刚好让沙漠在 ~18% 的表面可见——稀疏但不消失。
+
+**渲染时发生了什么**：第3层渲染时需同时竞争第1、第2层的深度值。在某个像素位置，只有当沙漠噪声值 > max(海洋噪声值, 森林噪声值) 时沙漠才可见。这个概率远小于 50%（因为 max 是两个随机变量的最大值，期望偏向正值），所以 mag 设在 0.18。可见区域约 18% → 其中有 colorThreshold=0.62，约 62% 显示暗土黄、38% 显示亮沙 → 最终约 7% 表面是亮沙色。
+
+---
+
+#### 第4层：灰色山脉暗面 ⛰️
+
+```jsonc
+{ "type": "NoiseMesh", "seed": 199,
+  "color1": "7a7a7a", "color2": "9a9a9a",
+  "divisions": 4, "radius": 0.7, "octaves": 4,
+  "persistence": 0.5, "scale": 2.5, "mag": 0.22,
+  "colorOct": 2, "colorPersistence": 0.5,
+  "colorScale": 7.0, "colorThreshold": 0.55 }
+```
+
+| 参数 | 值 | 为什么这么写 |
+|------|----|------------|
+| `seed` | `199` | 独立噪声分布 |
+| `color1` | `7a7a7a` | 中性灰。RGB(122,122,122)——模拟岩石的暗面，无色彩倾向 |
+| `color2` | `9a9a9a` | 浅灰。RGB(154,154,154)——比 color1 亮约 25%，模拟被光照亮的岩石面。两色完全相同色相（灰色），仅亮度有别 |
+| `mag` | `0.22` | **比沙漠的 0.18 大、比森林的 0.30 小**。这个看似反常的设定（山脉不该比沙漠更靠外吗？）是坑 5 纠正的结果。山脉需要同时穿透前 3 层（海洋 + 森林 + 沙漠），三层独立随机变量的联合最大值在统计学上比单层噪声显著偏高。mag=0.15 时山脉几乎不可见（实际穿透概率 ~2-3%），加大到 0.22 才恢复到约 12% 可见比例 |
+| `colorScale` | `7.0` | 比沙漠更大 → 山脉是大块连续的，模拟真实的安第斯/喜马拉雅尺度 |
+| `colorThreshold` | `0.55` | 略偏暗色（`color1` 占 55%），让山脉整体呈灰色调。如果阈值太低（如 0.3），亮灰色块过多，会和雪峰层混淆 |
+| `divisions` | `4` | 比前三层少一级（4 vs 5）。山脉在最外层，距摄像机最近，不需要最密的网格。降低 divisions 可节省约 40% 的顶点数而不影响视觉质量 |
+| `octaves` | `4` | 山脉地形比沙漠更平滑——山脉是大型地质构造，不需要 6-7 层高频细节 |
+
+**为什么 mag=0.22 > 沙漠的 0.18？** 这不是错误。沙漠虽然在"地形顺序"上高于海洋/森林，但它的 mag 设得很小（0.18）来保证稀疏。山脉 mag=0.22 比沙漠大——因为山脉需要同时竞争海洋、森林、沙漠三层。如果 mag 太小，三层的联合最大值会完全压制山脉。0.22 是经过坑 5 调校后的平衡点。
+
+---
+
+#### 第5层：白色山脉亮面 / 冰盖 🏔️
+
+```jsonc
+{ "type": "NoiseMesh", "seed": 241,
+  "color1": "c0c8c080", "color2": "d8e0d860",
+  "divisions": 4, "radius": 0.7, "octaves": 3,
+  "persistence": 0.5, "scale": 3.0, "mag": 0.20,
+  "colorOct": 2, "colorPersistence": 0.5,
+  "colorScale": 9.0, "colorThreshold": 0.58 }
+```
+
+| 参数 | 值 | 为什么这么写 |
+|------|----|------------|
+| `seed` | `241` | 独立噪声分布。与山脉灰层 seed 不同 → 雪峰不完全覆盖在灰色山脉的正上方（否则看起来像"给山脉戴白帽子"，太人工），而是与灰色山脉有偏移的重叠 |
+| `color1` | `c0c8c080` | 半透明白色。RGB(192,200,128)，alpha=0x80≈0.5。alpha 通道在这里的作用是降低镜面高光（shader 中 `albedo = 1.0 - a_color.a`），让雪峰的反射更柔和、不会闪瞎眼。RGB 各通道偏高（192-200），略带蓝绿底色（模拟冰的冷色调） |
+| `color2` | `d8e0d860` | 更亮的半透明白。alpha=0x60≈0.375，比 color1 更透明 → 亮面上反光更柔和 |
+| `mag` | `0.20` | 比山脉灰的 0.22 略小——雪峰是山脉的"冠冕"，应该只出现在山脉灰已经凸出的位置中噪声最高的子集。同一地理位置，山脉灰高出三层后，雪峰还需要比山脉灰更高 → 需要叠加概率。mag=0.20 在联合竞争下产生约 8% 的可见比例（稀有） |
+| `colorScale` | `9.0` | 五层中最大。雪峰/冰盖是地球上最大尺度的地形特征（南极冰盖、喜马拉雅雪顶），用最大的色块尺度模拟 |
+| `colorThreshold` | `0.58` | > 0.5 → 约 58% 用暗白、42% 用亮白。暗白略多，整体不会过于刺眼 |
+| `octaves` | `3` | 五层中最少。雪峰的地形是最平滑的——冰川和积雪覆盖会抚平地形细节 |
+| `scale` | `3.0` | 五层中最大。雪峰的起伏非常稀疏，对应现实中冰盖覆盖广袤平坦区域的特征 |
+| `divisions` | `4` | 与山脉灰同级别 |
+
+**为什么 alpha 通道不是 0xFF？** `color1: "c0c8c080"` 的 alpha=0x80（半透明）、`color2: "d8e0d860"` 的 alpha=0x60（更透明）。这里 alpha 不是用来做透明度混合的（glBlend 没有开启），而是通过 shader 中的 `albedo = 1.0 - a_color.a` 来抑制镜面高光的强度。alpha 越小 → albedo 越大 → 高光越弱 → 雪峰看起来是哑光的（像真实的雪），而不是塑料般的反光表面。
+
+**渲染时发生了什么**：第5层是最后渲染的层。它在所有前四层之后提交给 GPU。要可见，雪峰的噪声值必须同时超过海洋、森林、沙漠、山脉灰四层的噪声值——四层独立随机变量的联合最大值。mag=0.20 下实际穿透概率约 8%。在那些位置，雪峰的半透明白色覆盖在山脉之上，alpha 通道使高光柔和——最终效果像雪或冰盖覆盖在山脊之上。
+
+---
+
+### 6.2 五层叠加的完整视觉模型
+
+```
+你可以把每一帧的渲染想象成以下过程（按时间顺序）：
+
+GPU 清空深度缓冲（所有像素深度 = ∞）
+
+第1层 海洋渲染：
+  → 海洋的每个顶点深度写入深度缓冲
+  → 屏幕显示：纯蓝球体（有噪声凹凸）
+
+第2层 森林渲染：
+  → 每个像素：森林深度 vs 深度缓冲（海洋深度）
+  → 森林更近 → 显示绿色，更新深度缓冲
+  → 海洋更近 → 保持蓝色，不更新
+  → 屏幕显示：蓝底上叠加绿色大陆（约 50% 区域）
+
+第3层 沙漠渲染：
+  → 每个像素：沙漠深度 vs 深度缓冲[min(海洋深度, 森林深度)]
+  → 沙漠更近 → 显示黄/亮沙色，更新
+  → 前两层更近 → 保持原色
+  → 屏幕显示：蓝绿底上散落黄色斑块（约 18% 区域）
+
+第4层 山脉灰渲染：
+  → 竞争前三层的联合深度
+  → 山脉灰更近 → 显示灰色，更新
+  → 屏幕显示：灰色山脊隐约出现（约 12% 区域）
+
+第5层 山脉白渲染：
+  → 竞争前四层的联合深度
+  → 山脉白更近 → 显示白色冰盖，更新
+  → 屏幕显示：白色雪峰点缀在山脉和最高处（约 8% 区域）
+
+最终帧缓冲 → 输出到屏幕
+```
+
+**为什么各层的可见比例加起来远超 100% 但不冲突？** 因为"可见比例"指的是独立概率（该层单独渲染时可见的顶点占比），但实际像素的最终归属是互斥的——一个像素只能显示一层颜色。最终画面中海洋约 50%、森林约 30%（剩下 20% 被沙漠+山脉覆盖）、沙漠约 10%、山脉灰约 7%、山脉白约 3%——总和 100%，由深度测试的**逐像素仲裁**保证。
