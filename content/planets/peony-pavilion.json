@@ -110,11 +110,11 @@
         "octaves": 4,
         "persistence": 0.5,
         "scale": 2.5,
-        "mag": 0.15,
+        "mag": 0.22,
         "colorOct": 2,
         "colorPersistence": 0.5,
         "colorScale": 7.0,
-        "colorThreshold": 0.65
+        "colorThreshold": 0.55
       },
       {
         "type": "NoiseMesh",
@@ -127,11 +127,11 @@
         "octaves": 3,
         "persistence": 0.5,
         "scale": 3.0,
-        "mag": 0.12,
+        "mag": 0.20,
         "colorOct": 2,
         "colorPersistence": 0.5,
         "colorScale": 9.0,
-        "colorThreshold": 0.68
+        "colorThreshold": 0.58
       }
     ]
   },
