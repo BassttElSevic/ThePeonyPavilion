@@ -4,6 +4,8 @@
 > **关联文件**:
 > - `content/planets/aldebaran.json`（新建）
 > - `content/planets/peony-pavilion.json`（修改）
+> - `bundles/bundle.properties`（修改，新增 Aldebaran 条目）
+> - `bundles/bundle_zh_CN.properties`（修改，新增毕宿四条目）
 > **涉及源码**:
 > - `mindustry/type/Planet.java`
 > - `mindustry/mod/ContentParser.java`（第 804–862 行星解析、第 1124–1159 mesh 解析）
@@ -13,6 +15,8 @@
 > - `mindustry/ui/dialogs/PlanetDialog.java`（第 745–764 行）
 > - `mindustry/content/Planets.java`（原版太阳定义）
 > - `Factory/ref/Vanilla-Expansion-Mod-2111/content/planets/sol2.json`（参考 mod）
+> - `Factory/ref/Vanilla-Expansion-Mod-2111/bundles/bundle.properties`（bundle 键名格式参考）
+> - `Factory/ref/Vanilla-Expansion-Mod-2111/bundles/bundle_zh_CN.properties`（bundle 键名格式参考）
 
 ---
 
@@ -95,7 +99,7 @@ public final Bloom bloom = new Bloom(...){{
 
 ```jsonc
 {
-  "name": "毕宿四",              // 游戏内显示名称
+  "name": "aldebaran",            // 内部内容名；显示名称通过 bundles 提供
   "radius": 8,                  // 半径（原版太阳=4，巨星需要更大）
   "bloom": true,                // 触发 bloom 后处理光晕
   "hasAtmosphere": false,       // 恒星不需要大气散射
@@ -129,9 +133,44 @@ public final Bloom bloom = new Bloom(...){{
 + "orbitTime": 12000,
 ```
 
----
+### 2.4 修改文件：Bundle 本地化 (`bundles/bundle.properties` + `bundles/bundle_zh_CN.properties`)
 
-## 三、问题详情
+#### 错误做法（初始版本）
+
+初始版本将显示名称直接硬编码在 JSON 中：`"name": "毕宿四"`。这绕过了 Mindustry 的本地化系统——没有英文回退、不支持多语言，无论玩家语言设置如何，`planet.localizedName` 都返回同一个中文字符串。
+
+#### 正确做法
+
+Mindustry 通过 `.properties` bundle 文件来解析显示名称。JSON 的 `name` 字段应保持为**内部内容标识符**（`"aldebaran"`），而人类可读的名称通过 properties 文件提供，键名格式为：
+
+```
+planet.<mod名>-<内容名>.<属性>
+```
+
+其中：
+- `mod名` = `mod.json` 中 `name` 字段的小写 → `thepeonypavilion`
+- `内容名` = JSON 中 planet 的 `"name"` 字段 → `aldebaran`
+- `属性` = `.name`（显示名称）或 `.description`（悬停提示）
+
+此命名规范参考了 VE mod 的 bundles（`planet.ve-cyclant.name` 等）。
+
+#### 新增条目
+
+**`bundles/bundle.properties`**（英文）：
+```properties
+planet.thepeonypavilion-aldebaran.name = Aldebaran
+planet.thepeonypavilion-aldebaran.description = An orange giant star, the brightest in the constellation Taurus. Host star of the Peony Pavilion system.
+```
+
+**`bundles/bundle_zh_CN.properties`**（中文）：
+```properties
+planet.thepeonypavilion-aldebaran.name = 毕宿四
+planet.thepeonypavilion-aldebaran.description = 一颗橙巨星，金牛座中最明亮的恒星。牡丹亭星系的宿主恒星。
+```
+
+#### Mindustry 如何解析
+
+运行时，`ContentParser` 通过查找 bundle 键来赋值 `Planet.localizedName`。对于 mod 内容，查找键会自动加上 mod 的内部名前缀。星球选择 UI（`PlanetDialog` 第 310 行）用 `star.localizedName` 显示太阳系选项卡标题，用 `planet.localizedName`（第 317 行）显示行星按钮——两者都来源于这些 properties 文件。
 
 ### 问题 1：恒星完全不可见 —— 被视锥体的远裁剪面裁掉了
 
@@ -353,6 +392,7 @@ VE mod 的 `sol2.json` 使用了相同的模式：
 
 | 字段 | 第一版（问题状态） | 最终版（修复后） | 原因 |
 |------|-------------------|-----------------|------|
+| `name` | `"毕宿四"` | **`"aldebaran"`** | 内部标识符；显示名称移至 bundles |
 | `radius` | 6 | **8** | 巨星更醒目，增大可见面积 |
 | `hasAtmosphere` | (默认 true) | **false** | 恒星不需要大气，语义清晰 |
 | `iconColor` | `e86830` | **`ff7840`** | 匹配新色系，UI 图标颜色 |
@@ -395,4 +435,4 @@ VE mod 的 `sol2.json` 使用了相同的模式：
 |--------|------|------|
 | `4359192` | `feat/aldebaran-star` | 初始创建 aldebaran.json，修改 parent |
 | `0cae246` | `fix/aldebaran-visibility` | 修复恒星不可见（orbitRadius）+ bloom 颜色亮度 |
-| `a3176e2` | `master` | 将显示名称从 "aldebaran" 改为 "毕宿四" |
+| `a3176e2` | `master` | 添加 bundle 本地化：英文 "Aldebaran"，中文 "毕宿四" |

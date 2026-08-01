@@ -4,6 +4,8 @@
 > **Related Files**:
 > - `content/planets/aldebaran.json` (created)
 > - `content/planets/peony-pavilion.json` (modified)
+> - `bundles/bundle.properties` (modified, added Aldebaran entries)
+> - `bundles/bundle_zh_CN.properties` (modified, added 毕宿四 entries)
 > **Source Files Referenced**:
 > - `mindustry/type/Planet.java`
 > - `mindustry/mod/ContentParser.java` (lines 804–862 planet parsing, lines 1124–1159 mesh parsing)
@@ -13,6 +15,8 @@
 > - `mindustry/ui/dialogs/PlanetDialog.java` (lines 745–764)
 > - `mindustry/content/Planets.java` (vanilla sun definition)
 > - `Factory/ref/Vanilla-Expansion-Mod-2111/content/planets/sol2.json` (reference mod)
+> - `Factory/ref/Vanilla-Expansion-Mod-2111/bundles/bundle.properties` (bundle key format reference)
+> - `Factory/ref/Vanilla-Expansion-Mod-2111/bundles/bundle_zh_CN.properties` (bundle key format reference)
 
 ---
 
@@ -95,7 +99,7 @@ Core fields of the final version (after fixing Issues 1 & 2):
 
 ```jsonc
 {
-  "name": "毕宿四",              // In-game display name
+  "name": "aldebaran",            // Internal content name; display name provided via bundles
   "radius": 8,                  // Radius (vanilla sun=4, giant needs larger)
   "bloom": true,                // Trigger bloom post-processing glow
   "hasAtmosphere": false,       // Stars don't need atmospheric scattering
@@ -128,6 +132,45 @@ Core fields of the final version (after fixing Issues 1 & 2):
 - "orbitTime": 24000,
 + "orbitTime": 12000,
 ```
+
+### 2.4 Modified Files: Bundle Localization (`bundles/bundle.properties` + `bundles/bundle_zh_CN.properties`)
+
+#### Wrong Approach (Initial)
+
+The initial version hardcoded the display name directly in JSON: `"name": "毕宿四"`. This bypasses Mindustry's localization system entirely — no English fallback, no multi-language support, and `planet.localizedName` would return the same Chinese string regardless of the player's language setting.
+
+#### Correct Approach
+
+Mindustry resolves display names through `.properties` bundle files. The JSON `name` field should remain the **internal content identifier** (`"aldebaran"`), while human-readable names are provided via properties files using the key format:
+
+```
+planet.<modname>-<contentname>.<property>
+```
+
+Where:
+- `modname` = mod's `name` field from `mod.json`, lowercased → `thepeonypavilion`
+- `contentname` = planet's `"name"` field from JSON → `aldebaran`
+- `property` = `.name` (display name) or `.description` (hover tooltip)
+
+This naming convention was confirmed against VE mod's bundles (`planet.ve-cyclant.name` etc.).
+
+#### Added Entries
+
+**`bundles/bundle.properties`** (English):
+```properties
+planet.thepeonypavilion-aldebaran.name = Aldebaran
+planet.thepeonypavilion-aldebaran.description = An orange giant star, the brightest in the constellation Taurus. Host star of the Peony Pavilion system.
+```
+
+**`bundles/bundle_zh_CN.properties`** (Chinese):
+```properties
+planet.thepeonypavilion-aldebaran.name = 毕宿四
+planet.thepeonypavilion-aldebaran.description = 一颗橙巨星，金牛座中最明亮的恒星。牡丹亭星系的宿主恒星。
+```
+
+#### How Mindustry Resolves It
+
+At runtime, `ContentParser` assigns `Planet.localizedName` by looking up the bundle key. For mod content, the lookup key is automatically prefixed with the mod's internal name. The planet selection UI (`PlanetDialog` line 310) displays `star.localizedName` for solar system tab headers, and `planet.localizedName` (line 317) for planet buttons — both sourced from these properties files.
 
 ---
 
@@ -353,6 +396,7 @@ Our Aldebaran chose `parent: null` — a fully independent solar system, orbitin
 
 | Field | V1 (broken) | Final (fixed) | Reason |
 |-------|-------------|---------------|--------|
+| `name` | `"毕宿四"` | **`"aldebaran"`** | Internal identifier; display name moved to bundles |
 | `radius` | 6 | **8** | Giant star more visually prominent |
 | `hasAtmosphere` | (default true) | **false** | Stars don't need atmosphere, semantically clear |
 | `iconColor` | `e86830` | **`ff7840`** | Match new color scheme, UI icon color |
@@ -395,4 +439,4 @@ Our Aldebaran chose `parent: null` — a fully independent solar system, orbitin
 |--------|--------|-------------|
 | `4359192` | `feat/aldebaran-star` | Initial creation of aldebaran.json, modify parent |
 | `0cae246` | `fix/aldebaran-visibility` | Fix star invisibility (orbitRadius) + bloom color brightness |
-| `a3176e2` | `master` | Change display name from "aldebaran" to "毕宿四" |
+| `a3176e2` | `master` | Add bundle localization: English "Aldebaran", Chinese "毕宿四" |
