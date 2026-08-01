@@ -1,15 +1,16 @@
 {
   "name": "aldebaran",
-  "radius": 6,
+  "radius": 8,
   "bloom": true,
+  "hasAtmosphere": false,
   "accessible": false,
   "alwaysUnlocked": true,
   "visible": true,
   "drawOrbit": false,
   "rotateTime": 2400,
   "solarSystem": "aldebaran",
-  "iconColor": "e86830",
-  "lightColor": "f0904060",
+  "iconColor": "ff7840",
+  "lightColor": "ff905080",
   "children": [
     "peony-pavilion"
   ],
@@ -22,14 +23,14 @@
     "scl": 2.0,
     "pow": 1.1,
     "mag": 1.0,
-    "colorScale": 1.0,
+    "colorScale": 1.1,
     "colors": [
-      "c53a14",
-      "d85020",
-      "e86830",
-      "e86830",
-      "f09040",
-      "f5b058"
+      "ff4a20",
+      "ff6030",
+      "ff7840",
+      "ff7840",
+      "ff9050",
+      "ffb868"
     ]
   }
 }
