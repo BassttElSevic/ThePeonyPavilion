@@ -1,8 +1,8 @@
 {
   "name": "peony-pavilion",
   "parent": "aldebaran",
-  "orbitRadius": 320,
-  "orbitTime": 24000,
+  "orbitRadius": 24,
+  "orbitTime": 12000,
   "rotateTime": 1200,
   "radius": 0.7,
   "bloom": true,
