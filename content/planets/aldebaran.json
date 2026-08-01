@@ -1,0 +1,35 @@
+{
+  "name": "aldebaran",
+  "radius": 6,
+  "bloom": true,
+  "accessible": false,
+  "alwaysUnlocked": true,
+  "visible": true,
+  "drawOrbit": false,
+  "rotateTime": 2400,
+  "solarSystem": "aldebaran",
+  "iconColor": "e86830",
+  "lightColor": "f0904060",
+  "children": [
+    "peony-pavilion"
+  ],
+  "mesh": {
+    "type": "SunMesh",
+    "planet": "aldebaran",
+    "divisions": 5,
+    "octaves": 5,
+    "persistence": 0.3,
+    "scl": 2.0,
+    "pow": 1.1,
+    "mag": 1.0,
+    "colorScale": 1.0,
+    "colors": [
+      "c53a14",
+      "d85020",
+      "e86830",
+      "e86830",
+      "f09040",
+      "f5b058"
+    ]
+  }
+}

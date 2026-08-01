@@ -1,6 +1,6 @@
 {
   "name": "peony-pavilion",
-  "parent": "sun",
+  "parent": "aldebaran",
   "orbitRadius": 320,
   "orbitTime": 24000,
   "rotateTime": 1200,
