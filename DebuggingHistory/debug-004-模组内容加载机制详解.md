@@ -2,10 +2,10 @@
 
 > **日期**: 2026-08-04  
 > **关联文件**:
-> - `scripts/main.js`（牡丹亭，当前只有一行 log，后续将扩展）
-> - `scripts/items.js`（牡丹亭，**尚未创建**，本次任务目标）
-> - `content/items/`（牡丹亭，**尚未创建**，本次任务目标）
-> - `sprites/items/`（牡丹亭，33 张物品贴图已就绪，已规范重命名为 kebab-case）
+> - `scripts/main.js`（繁星，当前只有一行 log，后续将扩展）
+> - `scripts/items.js`（繁星，**尚未创建**，本次任务目标）
+> - `content/items/`（繁星，**尚未创建**，本次任务目标）
+> - `sprites/items/`（繁星，33 张物品贴图已就绪，已规范重命名为 kebab-case）
 > **涉及源码**（Mindustry master 分支）:
 > - `core/src/mindustry/ClientLauncher.java`（第 168–172 行，启动加载顺序）
 > - `core/src/mindustry/ctype/Content.java`（构造方法约第 20–23 行，自动注册）
@@ -22,11 +22,11 @@
 
 ## 〇、背景与目标
 
-牡丹亭的星球已经亮起来了。下一步要写 `scripts/items.js` 和 `content/items/`，把设计文档里的资源真正做进游戏。
+繁星的星球已经亮起来了。下一步要写 `scripts/items.js` 和 `content/items/`，把设计文档里的资源真正做进游戏。
 
 但动手之前，必须先搞清楚一个问题：**VE 参考模组为什么要把内容定义拆成"JS 脚本 + JSON 文件"两份？它们之间是什么关系？游戏又是怎么把这两份东西拼成一个物品的？**
 
-本文档的目标是：读完它之后，你能**自己看懂** VE 的 `items.js` / `blocks.js` / `main.js` 每一行在干什么，知道每个名词、每个符号的意思，然后照着写出牡丹亭自己的版本。
+本文档的目标是：读完它之后，你能**自己看懂** VE 的 `items.js` / `blocks.js` / `main.js` 每一行在干什么，知道每个名词、每个符号的意思，然后照着写出繁星自己的版本。
 
 > 读者水平假设：了解"程序按顺序执行、变量存值、函数可以调用"这些最基本的概念，但**不熟悉 JS 语法**，也没读过多少 Java 源码。文档里所有专有名词第一次出现都会用**加粗**标出并解释。
 
@@ -360,7 +360,7 @@ public String transformName(String name){
 }
 ```
 
-内容在游戏里的**真实注册名** = `mod名-内容名`。所以你的 iron 在游戏里真名叫 `thepeonypavilion-iron`。这个前缀是为了**防止不同 mod 的内容互相撞名**。但**写 JSON 引用时不用带前缀**（游戏会按"当前 mod 上下文"自动补），只有跨 mod 引用才需要写全名。
+内容在游戏里的**真实注册名** = `mod名-内容名`。所以你的 iron 在游戏里真名叫 `starfield-iron`。这个前缀是为了**防止不同 mod 的内容互相撞名**。但**写 JSON 引用时不用带前缀**（游戏会按"当前 mod 上下文"自动补），只有跨 mod 引用才需要写全名。
 
 ### 6.5 JSON 解析：找到同名 → 填属性；找不到 → 新建（ContentParser.java 第 584–593 行，block 为例）
 
@@ -430,9 +430,9 @@ if(allowPatching && locate(ContentType.block, name) != null){
 
 ---
 
-## 八、这对牡丹亭意味着什么（下一步怎么动手）
+## 八、这对繁星意味着什么（下一步怎么动手）
 
-理解机制后，写牡丹亭的资源体系就很机械了：
+理解机制后，写繁星的资源体系就很机械了：
 
 1. **创建 `scripts/items.js`**，照 VE 抄帮手函数（一个字都不用改）：
 
@@ -449,7 +449,7 @@ if(allowPatching && locate(ContentType.block, name) != null){
 
 3. **创建 `scripts/main.js`**：保留现有 `log`，加一行 `require("items");`。
 
-4. **每加一个物品，同步在 `bundles/bundle_zh_CN.properties` 加一条** `item.thepeonypavilion-iron.name = 铁`（键格式：`item.mod名-内容名.name`）。
+4. **每加一个物品，同步在 `bundles/bundle_zh_CN.properties` 加一条** `item.starfield-iron.name = 铁`（键格式：`item.mod名-内容名.name`）。
 
 5. **验证**：`./gradlew desktop:run` 或游戏内导入 mod → 沙盒里看物品是否出现在核心、贴图是否正常显示。每次只加几个，验证通过再加下一批（"焚诀"：先让它出现，再让它好看）。
 
@@ -459,7 +459,7 @@ if(allowPatching && locate(ContentType.block, name) != null){
 
 # 附录 A：debug-004 之后的实施记录（2026-08-04）
 
-> 读完 debug-004 的机制后，按它落地了牡丹亭的资源体系与核心链。本附录记录：做了什么、为什么这么做、过程中修正了哪些认知、还有哪些待办。
+> 读完 debug-004 的机制后，按它落地了繁星的资源体系与核心链。本附录记录：做了什么、为什么这么做、过程中修正了哪些认知、还有哪些待办。
 
 ## A.1 本次实施内容总览
 
@@ -478,13 +478,13 @@ if(allowPatching && locate(ContentType.block, name) != null){
 
 1. **"变种"数量是 16 不是 17**：用户原以为乙醇是原版资源（变种），但搜遍 `core/src/mindustry/content/` **没有 ethanol**——它是**新增液体**（设计文档里乙醇在"液体"节，原版无此物）。
 
-2. **JS 创建的内容名也带 mod 前缀**（重要修正）：`MappableContent.java:11` 构造函数统一执行 `this.name = Vars.content.transformName(name)`——**不管内容是 JS 建的还是 JSON 建的，名字都会变成 `mod名-内容名`**（如 `thepeonypavilion-sp-lead`）。所以：
-   - bundle 键永远是 `item.thepeonypavilion-xxx.name`（与 VE 的 `item.ve-aluminium.name` 一致）
+2. **JS 创建的内容名也带 mod 前缀**（重要修正）：`MappableContent.java:11` 构造函数统一执行 `this.name = Vars.content.transformName(name)`——**不管内容是 JS 建的还是 JSON 建的，名字都会变成 `mod名-内容名`**（如 `starfield-sp-lead`）。所以：
+   - bundle 键永远是 `item.starfield-xxx.name`（与 VE 的 `item.ve-aluminium.name` 一致）
    - 这也意味着 `newItem("lead")` 不会与原版 lead 撞名（注册名带前缀）——但为避免"两个铅"的混乱，仍用 sp- 变种方案
 
 3. **科技树信息在文档里是"隐含"的**：docx 里没有显式的"科技树"章节。科技顺序藏在两处：① 资源的**开采等级**（铁1/铅1 → 石墨2/钴2/金2/钛2 → 铀3/钍3）；② 工厂配方的**进料→出料**（如"碳压缩机：煤炭→石墨"）。research 就是按这些合成链设计的。
 
-4. **解锁状态按内容名独立存储**：`UnlockableContent.java:94/250`——每个内容用 `Core.settings` 里的 `名字-unlocked` 键记录解锁。变种名字不同 → 解锁状态独立 → **打过原版战役的存档不会在牡丹亭"白嫖"解锁**（用户设计目标的机制保证）。
+4. **解锁状态按内容名独立存储**：`UnlockableContent.java:94/250`——每个内容用 `Core.settings` 里的 `名字-unlocked` 键记录解锁。变种名字不同 → 解锁状态独立 → **打过原版战役的存档不会在繁星"白嫖"解锁**（用户设计目标的机制保证）。
 
 5. **research 的 parent 有时序坑（重要，踩过）**：科技树节点在 `ContentParser.finishParsing()`（第 1006–1014 行）里按**解析顺序**批量构建（postreads），而解析顺序 = **ContentType 类型序（block 最先，item/liquid 在后）+ 文件名字母序**。所以 research.parent 必须满足：**parent 的解析早于 child**，否则 `ContentParser.java:1405` 报 "isn't in the tech tree" 警告，节点成孤儿、从科技树消失。踩到的 5 个反例：`sp-metaglass→sp-sand`、`sp-blast-compound→sp-coal`、`sp-cryofluid→sp-water`、`sp-hydrogen→sp-water`（同类型字母序在后）、`sp-core-mk1→sp-silicon`（block 先于 item）。**修复**：`mod.json` 的 `contentOrder` 把 4 个被引用的 parent（`sp-sand`/`sp-coal`/`sp-water`/`sp-silicon`）提前解析（Mods.java:882 按列表顺序先加载）。**规则：以后新增内容，parent 若字母序或类型序晚于 child，必须加进 contentOrder。**
 
@@ -501,7 +501,7 @@ sp-damaged-core.json 要点：
 health 800 | size 3 | itemCapacity 2000 | unitCapModifier +4
 buildVisibility: "hidden"（不可建造，只能地图预置）
 configurable: false（禁核心界面 = 禁发射）
-research: root + planet peony-pavilion（科技树根）
+research: root + planet viar（科技树根）
 ```
 
 ## A.4 I 型核心的技术方案（核心替换机制的实现）
@@ -510,13 +510,13 @@ research: root + planet peony-pavilion（科技树根）
 
 - `category: "effect"` + `buildVisibility: "coreZoneOnly"`：coreZoneOnly = 只能在**核心区域**建造。受损核心（CoreBlock）周围会自动形成核心区域 → 玩家在受损核心的位置直接重建出 I 型核心 = "替换"。
 - `isFirstTier: true`：标记为核心链第一级（II 型核心在其上升级）。
-- 材料 `iron/1000 + sp-lead/1000`（文档数值，用牡丹亭自己的资源）。
+- 材料 `iron/1000 + sp-lead/1000`（文档数值，用繁星自己的资源）。
 - `research.parent: "sp-silicon"`：**过渡选择**——等数据链（computer-chip/data-unit）JSON 落地后改挂数据链（文档：数据单元"用于复原数据库内的科技"）。
 
 ## A.5 当前科技树（2026-08-04 状态）
 
 ```
-sp-damaged-core（root，牡丹亭行星）—— 开局即有
+sp-damaged-core（root，维亚尔行星）—— 开局即有
 ├── sp-lead / sp-coal / sp-sand / sp-titanium / sp-thorium / sp-scrap / sp-water / sp-oil
 │   （8 个基础资源，parent = 受损核心）
 ├── sp-coal → sp-graphite → sp-blast-compound*

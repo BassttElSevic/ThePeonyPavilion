@@ -14,7 +14,7 @@
 ```
 [E] Error loading content: content/sectors/crash-site.json
 arc.util.ArcRuntimeException: File not found:
-maps/thepeonypavilion-peony-pavilion/thepeonypavilion-crash-site.msav (internal)
+maps/starfield-viar/starfield-crash-site.msav (internal)
     at arc.files.Fi.read(Fi.java:215)
     at arc.files.Fi.read(Fi.java:232)
     at mindustry.io.MapIO.createMap(MapIO.java:38)
@@ -49,13 +49,13 @@ maps/<星球内部名>/<星区内部名>.msav
 ```
 本项目的实际路径：
 ```
-maps/thepeonypavilion-peony-pavilion/thepeonypavilion-crash-site.msav
+maps/starfield-viar/starfield-crash-site.msav
 ```
 
 ### 修复
 
 "亮起来"阶段不需要星区预设。将 `crash-site.json` 从 `content/sectors/`
-移至 `maps/thepeonypavilion-peony-pavilion/`，让 ContentParser 跳过它。
+移至 `maps/starfield-viar/`，让 ContentParser 跳过它。
 `.msav` 地图文件后续使用游戏内置地图编辑器创建后，再将 JSON 移回。
 
 ### 对应 Commit
@@ -68,7 +68,7 @@ maps/thepeonypavilion-peony-pavilion/thepeonypavilion-crash-site.msav
 ### 现象
 
 当 `~/.local/share/Mindustry/mods/` 中存在指向开发目录
-`~/Factory/ThePeonyPavilion/` 的软链接时，在游戏内点击"删除 Mod"
+`~/Factory/Starfield/` 的软链接时，在游戏内点击"删除 Mod"
 会递归删除软链接目标。包括 `.git/` 在内的全部源码丢失。
 
 ### 根因
@@ -118,7 +118,7 @@ public static class ModMeta{
 |---|---|---|
 | `displayname`（小写 n） | `displayName`（大写 N） | 修正大小写 |
 | （缺失）`subtitle` | `subtitle` 存在 | 添加 |
-| （缺失）`repo` | `repo` 存在 | 添加 `BassttElSevic/ThePeonyPavilion` |
+| （缺失）`repo` | `repo` 存在 | 添加 `BassttElSevic/Starfield` |
 | （缺失）`hasScripts` | **不存在** | 从模板中移除；游戏自动检测 `scripts/main.js` |
 
 VE 的 mod.json 中写的 `hasScripts` 字段被 JSON 反序列化器静默忽略。
@@ -196,7 +196,7 @@ public Planet(String name, Planet parent, float radius, int sectorSize){
 VE 的 `scripts/sectorSize.js` 中使用 `planetGrid()` 仅仅是因为 Tantros
 在 JSON 中 `sectorSize=0`，需要通过 JS 动态创建。
 
-对于牡丹亭星球（JSON 中 `"sectorSize": 2`），`planetGrid()` 完全不必要，
+对于维亚尔星球（JSON 中 `"sectorSize": 2`），`planetGrid()` 完全不必要，
 且会造成重复创建。
 
 ### 修复
@@ -213,8 +213,8 @@ VE 的 `scripts/sectorSize.js` 中使用 `planetGrid()` 仅仅是因为 Tantros
 | Mod 类型 | JS + JSON |
 | 源码路径 | `Factory/Mindustry/`, `Factory/Arc/` |
 | 参考模组 | Vanilla Expansion 2.1.1.1 (`Factory/ref/Vanilla-Expansion-Mod-2111/`) |
-| Mod 仓库 | `github.com/BassttElSevic/ThePeonyPavilion` |
-| 开发目录 | `Factory/ThePeonyPavilion/` |
+| Mod 仓库 | `github.com/BassttElSevic/Starfield` |
+| 开发目录 | `Factory/Starfield/` |
 | 导入方式 | GitHub 导入（禁止软链接） |
 
 
@@ -222,7 +222,7 @@ VE 的 `scripts/sectorSize.js` 中使用 `planetGrid()` 仅仅是因为 Tantros
 
 ```
 [OK] Mod 加载: 绿色 enabled
-[OK] main.js: "牡丹亭 Mod 已加载"
-[OK] 星球 peony-pavilion: 解析成功，挂在原版 sun 下，战役/沙盒模式可见
+[OK] main.js: "繁星 Mod 已加载"
+[OK] 星球 viar: 解析成功，挂在原版 sun 下，战役/沙盒模式可见
 [--] 星区 crash-site: 暂缓，等待 .msav 地图文件创建
 ```

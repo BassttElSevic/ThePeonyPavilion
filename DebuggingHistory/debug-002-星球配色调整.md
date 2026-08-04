@@ -1,7 +1,7 @@
 # debug-002: 星球配色调整——蓝绿地球外观
 
 > **日期**: 2026-07-27  
-> **关联文件**: `content/planets/peony-pavilion.json`  
+> **关联文件**: `content/planets/viar.json`  
 > **涉及源码**:
 > - `mindustry/graphics/g3d/PlanetRenderer.java`
 > - `mindustry/graphics/g3d/NoiseMesh.java`
@@ -80,7 +80,7 @@
 
 ### 0.4 这与我们的 JSON 有什么关系？
 
-看我们的 `peony-pavilion.json` 的 `"mesh"` 字段：
+看我们的 `viar.json` 的 `"mesh"` 字段：
 
 ```jsonc
 "mesh": {
@@ -134,7 +134,7 @@
 
 ## 一、背景与目标
 
-牡丹亭 mod 的 `peony-pavilion.json` 原本采用**紫灰+蓝绿**的"AI 主题色"配色方案。本次任务将其改为**类似地球的蓝绿色外观**——蓝色海洋为基底，叠加绿色森林、黄色沙漠、灰色山脉暗面和白色山脉亮面（冰盖/雪峰），实现五层地形的视觉分层。
+繁星 mod 的 `viar.json` 原本采用**紫灰+蓝绿**的"AI 主题色"配色方案。本次任务将其改为**类似地球的蓝绿色外观**——蓝色海洋为基底，叠加绿色森林、黄色沙漠、灰色山脉暗面和白色山脉亮面（冰盖/雪峰），实现五层地形的视觉分层。
 
 ---
 
@@ -180,7 +180,7 @@
 
 ### 2.1 第一阶段：JSON 如何变成 NoiseMesh 对象
 
-这一阶段回答：`peony-pavilion.json` 中的 `"radius": 0.7`、`"color1": "1d7a28"` 这些字符串，经过什么代码路径，最终变成 Java 内存中一个可以绘制的 NoiseMesh 实例。
+这一阶段回答：`viar.json` 中的 `"radius": 0.7`、`"color1": "1d7a28"` 这些字符串，经过什么代码路径，最终变成 Java 内存中一个可以绘制的 NoiseMesh 实例。
 
 #### 2.1.1 唯一入口：`ContentParser.parseMesh()`
 
@@ -617,7 +617,7 @@ Fragment shader 极其简单——只做直通。所有光照计算都在 vertex
 ```
 游戏启动，加载 mod
   │
-  └→ ContentParser 解析 peony-pavilion.json
+  └→ ContentParser 解析 viar.json
        │
        └→ parseMesh() 解析 "mesh" 字段
            ├─ data.isArray() → 不是数组（是对象，有 type 字段）
@@ -875,7 +875,7 @@ Fragment shader 极其简单——只做直通。所有光照计算都在 vertex
 
 ## 六、附：完整 JSON 与逐层参数讲解
 
-> 下面是 `peony-pavilion.json` 中 `"mesh"` 字段的完整内容。读完它，你应该能准确说出"这个 JSON 定义了多少层 mesh、每一层是什么、为什么参数这么写"。
+> 下面是 `viar.json` 中 `"mesh"` 字段的完整内容。读完它，你应该能准确说出"这个 JSON 定义了多少层 mesh、每一层是什么、为什么参数这么写"。
 
 ### 6.0 完整 JSON
 
@@ -888,7 +888,7 @@ Fragment shader 极其简单——只做直通。所有光照计算都在 vertex
         // ═══════════════════════════════════════════
         {
             "type": "NoiseMesh",
-            "planet": "peony-pavilion",
+            "planet": "viar",
             "seed": 42,
             "color": "1050a0",
             "divisions": 5,
@@ -903,7 +903,7 @@ Fragment shader 极其简单——只做直通。所有光照计算都在 vertex
         // ═══════════════════════════════════════════
         {
             "type": "NoiseMesh",
-            "planet": "peony-pavilion",
+            "planet": "viar",
             "seed": 77,
             "color1": "1d7a28",
             "color2": "3db840",
@@ -923,7 +923,7 @@ Fragment shader 极其简单——只做直通。所有光照计算都在 vertex
         // ═══════════════════════════════════════════
         {
             "type": "NoiseMesh",
-            "planet": "peony-pavilion",
+            "planet": "viar",
             "seed": 131,
             "color1": "b8a050",
             "color2": "d0c068",
@@ -943,7 +943,7 @@ Fragment shader 极其简单——只做直通。所有光照计算都在 vertex
         // ═══════════════════════════════════════════
         {
             "type": "NoiseMesh",
-            "planet": "peony-pavilion",
+            "planet": "viar",
             "seed": 199,
             "color1": "7a7a7a",
             "color2": "9a9a9a",
@@ -963,7 +963,7 @@ Fragment shader 极其简单——只做直通。所有光照计算都在 vertex
         // ═══════════════════════════════════════════
         {
             "type": "NoiseMesh",
-            "planet": "peony-pavilion",
+            "planet": "viar",
             "seed": 241,
             "color1": "c0c8c080",
             "color2": "d8e0d860",
@@ -989,7 +989,7 @@ Fragment shader 极其简单——只做直通。所有光照计算都在 vertex
 ### 6.1 逐层参数精讲
 
 > 对所有层通用的字段先说清楚：
-> - `"planet": "peony-pavilion"` — 关联到哪个星球（用于获取位置、自转等运行时数据）
+> - `"planet": "viar"` — 关联到哪个星球（用于获取位置、自转等运行时数据）
 > - `"persistence": 0.5` — 分形噪声中相邻频率层的振幅衰减。0.5 是 Mindustry 标准值，不需调整
 > - `"colorPersistence": 0.5` — 颜色噪声的振幅衰减，同上
 

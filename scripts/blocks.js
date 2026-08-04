@@ -1,5 +1,5 @@
 // ============================================
-// 牡丹亭 Mod — 方块注册文件 (blocks.js)
+// 繁星 Mod — 方块注册文件 (blocks.js)
 // ============================================
 // 和 items.js 同理：这里创建方块的"壳子"并登记进游戏，
 // 数值属性由 content/blocks/*.json 填充（机制详见 debug-004）。
@@ -19,7 +19,7 @@ function newBlock(name, blockType) {
 
 // 受损核心（sp-damaged-core）
 // 设计来源：设计文档"特殊"节——受损的主舰核心，已丧失大部分功能。
-// 它是牡丹亭科技树的根节点（JSON 里 research.root: true），开局由地图预置。
+// 它是繁星科技树的根节点（JSON 里 research.root: true），开局由地图预置。
 // 为什么用 CoreBlock 而不是普通存储方块：
 //   游戏强制要求"开局负载必须包含核心"（源码 Schematics.placeLoadout，
 //   找不到 CoreBlock 会直接抛异常），所以它必须是 CoreBlock 的变体。

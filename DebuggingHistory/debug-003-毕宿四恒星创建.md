@@ -3,7 +3,7 @@
 > **日期**: 2026-08-01  
 > **关联文件**:
 > - `content/planets/aldebaran.json`（新建）
-> - `content/planets/peony-pavilion.json`（修改）
+> - `content/planets/viar.json`（修改）
 > - `bundles/bundle.properties`（修改，新增 Aldebaran 条目）
 > - `bundles/bundle_zh_CN.properties`（修改，新增毕宿四条目）
 > **涉及源码**:
@@ -22,13 +22,13 @@
 
 ## 〇、背景与目标
 
-牡丹亭 mod 的行星 `peony-pavilion` 原本绕原版太阳（`"parent": "sun"`）公转。本次任务：
+繁星 mod 的行星 `viar` 原本绕原版太阳（`"parent": "sun"`）公转。本次任务：
 
 1. **创建一个新的太阳**——毕宿四（内部名 `aldebaran`），一颗橙巨星（K 型光谱），颜色偏红橙色
-2. **让牡丹亭行星绕毕宿四公转**，而非原版太阳
+2. **让维亚尔行星绕毕宿四公转**，而非原版太阳
 3. **毕宿四作为独立太阳系的根节点**——在游戏星球选择界面中作为第二个太阳系出现
 
-最终实现了两个独立的太阳系（原版太阳系 + 毕宿四-牡丹亭星系），但过程中遇到了两个关键渲染问题（恒星不可见、bloom 不触发），需要深入源码逐一排查。
+最终实现了两个独立的太阳系（原版太阳系 + 毕宿四-繁星星系），但过程中遇到了两个关键渲染问题（恒星不可见、bloom 不触发），需要深入源码逐一排查。
 
 ---
 
@@ -42,7 +42,7 @@ Mindustry 中所有的天体都是一棵树的节点：
 
 ```
 sun (parent=null, 太阳系根)            aldebaran (parent=null, 太阳系根)
-├── erekir (绕日)                      └── peony-pavilion (绕毕宿四)
+├── erekir (绕日)                      └── viar (绕毕宿四)
 ├── tantros
 ├── serpulo
 └── ...
@@ -105,7 +105,7 @@ public final Bloom bloom = new Bloom(...){{
   "hasAtmosphere": false,       // 恒星不需要大气散射
   "accessible": false,          // 不可登陆
   "solarSystem": "aldebaran",   // 自引用 = 独立的太阳系选项卡
-  "children": ["peony-pavilion"],
+  "children": ["viar"],
   "mesh": {
     "type": "SunMesh",
     "divisions": 5,             // 六边形细分等级
@@ -122,7 +122,7 @@ public final Bloom bloom = new Bloom(...){{
 }
 ```
 
-### 2.3 修改文件：`content/planets/peony-pavilion.json`
+### 2.3 修改文件：`content/planets/viar.json`
 
 ```diff
 - "parent": "sun",
@@ -148,7 +148,7 @@ planet.<mod名>-<内容名>.<属性>
 ```
 
 其中：
-- `mod名` = `mod.json` 中 `name` 字段的小写 → `thepeonypavilion`
+- `mod名` = `mod.json` 中 `name` 字段的小写 → `starfield`
 - `内容名` = JSON 中 planet 的 `"name"` 字段 → `aldebaran`
 - `属性` = `.name`（显示名称）或 `.description`（悬停提示）
 
@@ -158,14 +158,14 @@ planet.<mod名>-<内容名>.<属性>
 
 **`bundles/bundle.properties`**（英文）：
 ```properties
-planet.thepeonypavilion-aldebaran.name = Aldebaran
-planet.thepeonypavilion-aldebaran.description = An orange giant star, the brightest in the constellation Taurus. Host star of the Peony Pavilion system.
+planet.starfield-aldebaran.name = Aldebaran
+planet.starfield-aldebaran.description = An orange giant star, the brightest in the constellation Taurus. Host star of the Starfield system.
 ```
 
 **`bundles/bundle_zh_CN.properties`**（中文）：
 ```properties
-planet.thepeonypavilion-aldebaran.name = 毕宿四
-planet.thepeonypavilion-aldebaran.description = 一颗橙巨星，金牛座中最明亮的恒星。牡丹亭星系的宿主恒星。
+planet.starfield-aldebaran.name = 毕宿四
+planet.starfield-aldebaran.description = 一颗橙巨星，金牛座中最明亮的恒星。繁星星系的宿主恒星。
 ```
 
 #### Mindustry 如何解析
@@ -176,7 +176,7 @@ planet.thepeonypavilion-aldebaran.description = 一颗橙巨星，金牛座中�
 
 #### 现象
 
-启动游戏后，可以看到**两个太阳系选项卡**（原版太阳系 + 毕宿四星系），说明 `solarSystem` 自引用和 `PlanetDialog` 的星系分组逻辑工作正常。但点击毕宿四星系后，画面中只有 peony-pavilion 一颗行星孤零零地漂浮在黑暗中——**恒星完全不显示**。
+启动游戏后，可以看到**两个太阳系选项卡**（原版太阳系 + 毕宿四星系），说明 `solarSystem` 自引用和 `PlanetDialog` 的星系分组逻辑工作正常。但点击毕宿四星系后，画面中只有 viar 一颗行星孤零零地漂浮在黑暗中——**恒星完全不显示**。
 
 #### 源码定位
 
@@ -217,16 +217,16 @@ public void renderPlanet(Planet planet, PlanetParams params){
 cam.position.set(params.planet.position).add(params.camPos);
 ```
 
-摄像机定位在**当前选中的行星**（`params.planet`，即 peony-pavilion）附近。然后调用 `cam.lookAt(params.planet.position)` 让摄像机朝向 peony-pavilion。
+摄像机定位在**当前选中的行星**（`params.planet`，即 viar）附近。然后调用 `cam.lookAt(params.planet.position)` 让摄像机朝向 viar。
 
 #### 计算验证
 
-当时 peony-pavilion 的 `orbitRadius = 320`：
+当时 viar 的 `orbitRadius = 320`：
 
 ```
 aldebaran.position = (0, 0, 0)     （无父天体，固定在原点）
-peony-pavilion.position ≈ (320, 0, 0)   （绕毕宿四公转）
-摄像机位置 ≈ peony-pavilion.position + offset ≈ (320 + δ, 0, ε)
+viar.position ≈ (320, 0, 0)   （绕毕宿四公转）
+摄像机位置 ≈ viar.position + offset ≈ (320 + δ, 0, ε)
 摄像机 → aldebaran 距离 ≈ 320
 cam.far = 150                     ← 320 > 150, 在远裁剪面之外！
 ```
@@ -366,7 +366,7 @@ for(Planet star : content.planets()){
 3. 第二个及之后的太阳系（`starCount > 1`）显示 `star.localizedName` 作为分隔标题
 4. 点击行星按钮调用 `viewPlanet(planet, false)`（第 757 行），切换摄像机到该行星
 
-**毕宿四星系满足条件**：`star = aldebaran`，`aldebaran.solarSystem == aldebaran` ✓；`peony-pavilion.solarSystem == aldebaran`（通过父链追溯）并且 `accessible = true`（可选中）✓。
+**毕宿四星系满足条件**：`star = aldebaran`，`aldebaran.solarSystem == aldebaran` ✓；`viar.solarSystem == aldebaran`（通过父链追溯）并且 `accessible = true`（可选中）✓。
 
 #### 验证
 
@@ -405,7 +405,7 @@ VE mod 的 `sol2.json` 使用了相同的模式：
 | `colors[4]` | `f09040` (0.941) | **`ff9050`** (1.000) | bloom（阈值 0.8） |
 | `colors[5]` | `f5b058` (0.961) | **`ffb868`** (1.000) | |
 
-### peony-pavilion.json 变更总结
+### viar.json 变更总结
 
 | 字段 | 第一版 | 最终版 | 原因 |
 |------|--------|--------|------|

@@ -14,7 +14,7 @@ Issues resolved: 4
 ```
 [E] Error loading content: content/sectors/crash-site.json
 arc.util.ArcRuntimeException: File not found:
-maps/thepeonypavilion-peony-pavilion/thepeonypavilion-crash-site.msav (internal)
+maps/starfield-viar/starfield-crash-site.msav (internal)
     at arc.files.Fi.read(Fi.java:215)
     at arc.files.Fi.read(Fi.java:232)
     at mindustry.io.MapIO.createMap(MapIO.java:38)
@@ -50,13 +50,13 @@ maps/<planet-internal-name>/<sector-internal-name>.msav
 ```
 For our case:
 ```
-maps/thepeonypavilion-peony-pavilion/thepeonypavilion-crash-site.msav
+maps/starfield-viar/starfield-crash-site.msav
 ```
 
 ### Fix
 
 For the "planet visibility" phase, the sector preset is not needed yet. Moved
-`crash-site.json` from `content/sectors/` to `maps/thepeonypavilion-peony-pavilion/`
+`crash-site.json` from `content/sectors/` to `maps/starfield-viar/`
 so that ContentParser skips it. The map file can be created later using the
 in-game map editor.
 
@@ -72,7 +72,7 @@ Once the `.msav` file is ready, move `crash-site.json` back to `content/sectors/
 ### Behavior
 
 When a symlink exists in `~/.local/share/Mindustry/mods/` pointing to the
-development directory `~/Factory/ThePeonyPavilion/`, invoking "Delete Mod"
+development directory `~/Factory/Starfield/`, invoking "Delete Mod"
 in-game recursively deletes the symlink target. All source files including
 `.git/` were lost.
 
@@ -124,7 +124,7 @@ Key findings against the original mod.json:
 |---|---|---|
 | `displayname` (lowercase n) | `displayName` (capital N) | Fixed casing |
 | (missing) `subtitle` | `subtitle` exists | Added |
-| (missing) `repo` | `repo` exists | Added `BassttElSevic/ThePeonyPavilion` |
+| (missing) `repo` | `repo` exists | Added `BassttElSevic/Starfield` |
 | (missing) `hasScripts` | Does NOT exist | Removed from template; game auto-detects `scripts/main.js` |
 
 The `hasScripts` field in VE's mod.json is silently ignored by the JSON
@@ -205,7 +205,7 @@ automatically creates the sector grid. VE's `scripts/sectorSize.js` with
 `planetGrid()` exists only because Tantros has `sectorSize=0` in its JSON
 and needs JS to dynamically create the grid.
 
-For the Peony Pavilion planet with `"sectorSize": 2` in JSON, `planetGrid()`
+For the Viar planet with `"sectorSize": 2` in JSON, `planetGrid()`
 is unnecessary and would double-create sectors.
 
 ### Fix
@@ -223,8 +223,8 @@ is redundant (JSON `sectorSize > 0`).
 | Mod type | JS + JSON |
 | Source paths | `Factory/Mindustry/`, `Factory/Arc/` |
 | Reference mod | Vanilla Expansion 2.1.1.1 (`Factory/ref/Vanilla-Expansion-Mod-2111/`) |
-| Mod repository | `github.com/BassttElSevic/ThePeonyPavilion` |
-| Development directory | `Factory/ThePeonyPavilion/` |
+| Mod repository | `github.com/BassttElSevic/Starfield` |
+| Development directory | `Factory/Starfield/` |
 | Import method | GitHub import (NOT symlink) |
 
 
@@ -232,7 +232,7 @@ is redundant (JSON `sectorSize > 0`).
 
 ```
 [OK] Mod loads: green enabled
-[OK] main.js: "Peony Pavilion Mod loaded"
-[OK] Planet peony-pavilion: parsed, parent=sun, visible in campaign/sandbox
+[OK] main.js: "Starfield Mod loaded"
+[OK] Planet viar: parsed, parent=sun, visible in campaign/sandbox
 [--] Sector crash-site: deferred, waiting for .msav map creation
 ```

@@ -1,5 +1,5 @@
 {
-  "name": "peony-pavilion",
+  "name": "viar",
   "parent": "aldebaran",
   "orbitRadius": 24,
   "orbitTime": 12000,
@@ -44,7 +44,7 @@
     "showSpawns": true,
     "logicUnitDeconstruct": true,
     "randomWaveAI": true,
-    "planet": "peony-pavilion"
+    "planet": "viar"
   },
   "defaultAttributes": {
     "spores": -1,
@@ -55,7 +55,7 @@
     "meshes": [
       {
         "type": "NoiseMesh",
-        "planet": "peony-pavilion",
+        "planet": "viar",
         "seed": 42,
         "color": "1050a0",
         "divisions": 5,
@@ -67,7 +67,7 @@
       },
       {
         "type": "NoiseMesh",
-        "planet": "peony-pavilion",
+        "planet": "viar",
         "seed": 77,
         "color1": "1d7a28",
         "color2": "3db840",
@@ -84,7 +84,7 @@
       },
       {
         "type": "NoiseMesh",
-        "planet": "peony-pavilion",
+        "planet": "viar",
         "seed": 131,
         "color1": "b8a050",
         "color2": "d0c068",
@@ -101,7 +101,7 @@
       },
       {
         "type": "NoiseMesh",
-        "planet": "peony-pavilion",
+        "planet": "viar",
         "seed": 199,
         "color1": "7a7a7a",
         "color2": "9a9a9a",
@@ -118,7 +118,7 @@
       },
       {
         "type": "NoiseMesh",
-        "planet": "peony-pavilion",
+        "planet": "viar",
         "seed": 241,
         "color1": "c0c8c080",
         "color2": "d8e0d860",
@@ -140,7 +140,7 @@
     "meshes": [
       {
         "type": "HexSkyMesh",
-        "planet": "peony-pavilion",
+        "planet": "viar",
         "seed": 13,
         "speed": 1.2,
         "radius": 0.12,

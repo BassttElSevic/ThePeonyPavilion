@@ -1,5 +1,5 @@
 {
-	// 牡丹亭"矿渣"——原版 slag 变种，数值抄自 Liquids.java
+	// 繁星"矿渣"——原版 slag 变种，数值抄自 Liquids.java
 	"color": "ffa166",
 	"temperature": 1,
 	"viscosity": 0.7,

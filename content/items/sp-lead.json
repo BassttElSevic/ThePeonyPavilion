@@ -1,5 +1,5 @@
 {
-	// 牡丹亭"铅"——原版 lead 的独立变种
+	// 繁星"铅"——原版 lead 的独立变种
 	// 数值抄自原版 Items.java 的 lead（color/hardness/cost）
 	"color": "8c7fa9",
 	"hardness": 1,

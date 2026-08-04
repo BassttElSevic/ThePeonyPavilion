@@ -1,5 +1,5 @@
 {
-	// 牡丹亭"冷却液"——原版 cryofluid 变种，数值抄自 Liquids.java
+	// 繁星"冷却液"——原版 cryofluid 变种，数值抄自 Liquids.java
 	"color": "6ecdec",
 	"heatCapacity": 0.9,
 	"temperature": 0.25,

@@ -3,7 +3,7 @@
 > **Date**: 2026-08-01  
 > **Related Files**:
 > - `content/planets/aldebaran.json` (created)
-> - `content/planets/peony-pavilion.json` (modified)
+> - `content/planets/viar.json` (modified)
 > - `bundles/bundle.properties` (modified, added Aldebaran entries)
 > - `bundles/bundle_zh_CN.properties` (modified, added 毕宿四 entries)
 > **Source Files Referenced**:
@@ -22,13 +22,13 @@
 
 ## 0. Background & Goals
 
-The Peony Pavilion mod's planet `peony-pavilion` originally orbited the vanilla sun (`"parent": "sun"`). This task required:
+The Starfield mod's planet `viar` originally orbited the vanilla sun (`"parent": "sun"`). This task required:
 
 1. **Create a new star** — Aldebaran (毕宿四, internal name `aldebaran`), an orange giant (K-type spectrum), reddish-orange in color
-2. **Re-parent Peony Pavilion** to orbit Aldebaran instead of the vanilla sun
+2. **Re-parent Viar** to orbit Aldebaran instead of the vanilla sun
 3. **Make Aldebaran a standalone solar system root** — appearing as a second solar system tab in the planet selection UI
 
-We successfully created two independent solar systems (vanilla sun system + Aldebaran–Peony Pavilion system), but encountered two critical rendering problems (star invisible, bloom not triggering) that required deep source code investigation.
+We successfully created two independent solar systems (vanilla sun system + Aldebaran–Starfield system), but encountered two critical rendering problems (star invisible, bloom not triggering) that required deep source code investigation.
 
 ---
 
@@ -42,7 +42,7 @@ All celestial bodies in Mindustry form a tree:
 
 ```
 sun (parent=null, system root)         aldebaran (parent=null, system root)
-├── erekir (orbits sun)                └── peony-pavilion (orbits Aldebaran)
+├── erekir (orbits sun)                └── viar (orbits Aldebaran)
 ├── tantros
 ├── serpulo
 └── ...
@@ -105,7 +105,7 @@ Core fields of the final version (after fixing Issues 1 & 2):
   "hasAtmosphere": false,       // Stars don't need atmospheric scattering
   "accessible": false,          // Not landable
   "solarSystem": "aldebaran",   // Self-reference = independent solar system tab
-  "children": ["peony-pavilion"],
+  "children": ["viar"],
   "mesh": {
     "type": "SunMesh",
     "divisions": 5,             // Hex subdivision level
@@ -122,7 +122,7 @@ Core fields of the final version (after fixing Issues 1 & 2):
 }
 ```
 
-### 2.3 Modified File: `content/planets/peony-pavilion.json`
+### 2.3 Modified File: `content/planets/viar.json`
 
 ```diff
 - "parent": "sun",
@@ -148,7 +148,7 @@ planet.<modname>-<contentname>.<property>
 ```
 
 Where:
-- `modname` = mod's `name` field from `mod.json`, lowercased → `thepeonypavilion`
+- `modname` = mod's `name` field from `mod.json`, lowercased → `starfield`
 - `contentname` = planet's `"name"` field from JSON → `aldebaran`
 - `property` = `.name` (display name) or `.description` (hover tooltip)
 
@@ -158,14 +158,14 @@ This naming convention was confirmed against VE mod's bundles (`planet.ve-cyclan
 
 **`bundles/bundle.properties`** (English):
 ```properties
-planet.thepeonypavilion-aldebaran.name = Aldebaran
-planet.thepeonypavilion-aldebaran.description = An orange giant star, the brightest in the constellation Taurus. Host star of the Peony Pavilion system.
+planet.starfield-aldebaran.name = Aldebaran
+planet.starfield-aldebaran.description = An orange giant star, the brightest in the constellation Taurus. Host star of the Starfield system.
 ```
 
 **`bundles/bundle_zh_CN.properties`** (Chinese):
 ```properties
-planet.thepeonypavilion-aldebaran.name = 毕宿四
-planet.thepeonypavilion-aldebaran.description = 一颗橙巨星，金牛座中最明亮的恒星。牡丹亭星系的宿主恒星。
+planet.starfield-aldebaran.name = 毕宿四
+planet.starfield-aldebaran.description = 一颗橙巨星，金牛座中最明亮的恒星。繁星星系的宿主恒星。
 ```
 
 #### How Mindustry Resolves It
@@ -180,7 +180,7 @@ At runtime, `ContentParser` assigns `Planet.localizedName` by looking up the bun
 
 #### Symptom
 
-After launching the game, **two solar system tabs** appeared (vanilla sun system + Aldebaran system), confirming that `solarSystem` self-reference and `PlanetDialog`'s grouping logic worked correctly. However, when clicking into the Aldebaran system, only peony-pavilion floated alone in the darkness — **the star was completely absent**.
+After launching the game, **two solar system tabs** appeared (vanilla sun system + Aldebaran system), confirming that `solarSystem` self-reference and `PlanetDialog`'s grouping logic worked correctly. However, when clicking into the Aldebaran system, only viar floated alone in the darkness — **the star was completely absent**.
 
 #### Source Code Trace
 
@@ -221,16 +221,16 @@ public void renderPlanet(Planet planet, PlanetParams params){
 cam.position.set(params.planet.position).add(params.camPos);
 ```
 
-The camera is positioned near the **currently selected planet** (`params.planet`, i.e., peony-pavilion). It then calls `cam.lookAt(params.planet.position)` to face peony-pavilion.
+The camera is positioned near the **currently selected planet** (`params.planet`, i.e., viar). It then calls `cam.lookAt(params.planet.position)` to face viar.
 
 #### Calculation Verification
 
-At the time, peony-pavilion had `orbitRadius = 320`:
+At the time, viar had `orbitRadius = 320`:
 
 ```
 aldebaran.position = (0, 0, 0)              (no parent, fixed at origin)
-peony-pavilion.position ≈ (320, 0, 0)        (orbiting Aldebaran)
-camera position ≈ peony-pavilion.position + offset ≈ (320 + δ, 0, ε)
+viar.position ≈ (320, 0, 0)        (orbiting Aldebaran)
+camera position ≈ viar.position + offset ≈ (320 + δ, 0, ε)
 camera → aldebaran distance ≈ 320
 cam.far = 150                                ← 320 > 150, beyond far plane!
 ```
@@ -370,7 +370,7 @@ for(Planet star : content.planets()){
 3. Starting from the second system (`starCount > 1`), show `star.localizedName` as a separator header
 4. Clicking a planet button calls `viewPlanet(planet, false)` (line 757), switching the camera to that planet
 
-**Aldebaran system satisfies conditions**: `star = aldebaran`, `aldebaran.solarSystem == aldebaran` ✓; `peony-pavilion.solarSystem == aldebaran` (traced through parent chain) and `accessible = true` (selectable) ✓.
+**Aldebaran system satisfies conditions**: `star = aldebaran`, `aldebaran.solarSystem == aldebaran` ✓; `viar.solarSystem == aldebaran` (traced through parent chain) and `accessible = true` (selectable) ✓.
 
 #### Verification
 
@@ -409,7 +409,7 @@ Our Aldebaran chose `parent: null` — a fully independent solar system, orbitin
 | `colors[4]` | `f09040` (0.941) | **`ff9050`** (1.000) | triggers bloom (threshold 0.8) |
 | `colors[5]` | `f5b058` (0.961) | **`ffb868`** (1.000) | |
 
-### peony-pavilion.json Changelog
+### viar.json Changelog
 
 | Field | V1 | Final | Reason |
 |-------|-----|-------|--------|

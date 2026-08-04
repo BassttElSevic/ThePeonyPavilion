@@ -1,7 +1,7 @@
 # debug-002: Planet Color Adjustment — Blue-Green Earth Appearance
 
 > **Date**: 2026-07-27  
-> **Associated File**: `content/planets/peony-pavilion.json`  
+> **Associated File**: `content/planets/viar.json`  
 > **Source Files Involved**:
 > - `mindustry/graphics/g3d/PlanetRenderer.java`
 > - `mindustry/graphics/g3d/NoiseMesh.java`
@@ -80,7 +80,7 @@ This is why `colorScale` (controls patch size) and `colorThreshold` (controls br
 
 ### 0.4 How Does This Relate to Our JSON?
 
-Look at the `"mesh"` field in our `peony-pavilion.json`:
+Look at the `"mesh"` field in our `viar.json`:
 
 ```jsonc
 "mesh": {
@@ -134,7 +134,7 @@ Stringing all the above mechanisms together gives us the design logic behind our
 
 ## 1. Background and Goal
 
-The Peony Pavilion mod's `peony-pavilion.json` originally used a **purple-gray + blue-green** "AI-themed" color scheme. This task changes it to a **blue-green Earth-like appearance** — a blue ocean base, overlaid with green forests, yellow deserts, gray mountain shadow sides, and white mountain bright sides (ice caps / snowy peaks), achieving five-layer terrain visual layering.
+The Starfield mod's `viar.json` originally used a **purple-gray + blue-green** "AI-themed" color scheme. This task changes it to a **blue-green Earth-like appearance** — a blue ocean base, overlaid with green forests, yellow deserts, gray mountain shadow sides, and white mountain bright sides (ice caps / snowy peaks), achieving five-layer terrain visual layering.
 
 ---
 
@@ -180,7 +180,7 @@ The following concepts span the entire rendering pipeline. If you are already fa
 
 ### 2.1 Phase 1: How JSON Becomes NoiseMesh Objects
 
-This phase answers: what code path do strings like `"radius": 0.7` and `"color1": "1d7a28"` in `peony-pavilion.json` take to ultimately become a drawable NoiseMesh instance in Java memory?
+This phase answers: what code path do strings like `"radius": 0.7` and `"color1": "1d7a28"` in `viar.json` take to ultimately become a drawable NoiseMesh instance in Java memory?
 
 #### 2.1.1 The Single Entry Point: `ContentParser.parseMesh()`
 
@@ -619,7 +619,7 @@ The fragment shader is extremely simple — just a pass-through. All lighting co
 ```
 Game start, loading mod
   │
-  └→ ContentParser parses peony-pavilion.json
+  └→ ContentParser parses viar.json
        │
        └→ parseMesh() parses the "mesh" field
            ├─ data.isArray() → not an array (it's an object, has a type field)
@@ -877,7 +877,7 @@ Desert max distance 0.719 **<** Forest max distance 0.755. All vertices of the d
 
 ## 6. Appendix: Complete JSON with Layer-by-Layer Parameter Walkthrough
 
-> Below is the complete content of the `"mesh"` field in `peony-pavilion.json`. After reading it, you should be able to precisely state: "this JSON defines how many mesh layers, what each layer is, and why each parameter is written as it is."
+> Below is the complete content of the `"mesh"` field in `viar.json`. After reading it, you should be able to precisely state: "this JSON defines how many mesh layers, what each layer is, and why each parameter is written as it is."
 
 ### 6.0 Complete JSON
 
@@ -890,7 +890,7 @@ Desert max distance 0.719 **<** Forest max distance 0.755. All vertices of the d
         // ═══════════════════════════════════════════
         {
             "type": "NoiseMesh",
-            "planet": "peony-pavilion",
+            "planet": "viar",
             "seed": 42,
             "color": "1050a0",
             "divisions": 5,
@@ -905,7 +905,7 @@ Desert max distance 0.719 **<** Forest max distance 0.755. All vertices of the d
         // ═══════════════════════════════════════════
         {
             "type": "NoiseMesh",
-            "planet": "peony-pavilion",
+            "planet": "viar",
             "seed": 77,
             "color1": "1d7a28",
             "color2": "3db840",
@@ -925,7 +925,7 @@ Desert max distance 0.719 **<** Forest max distance 0.755. All vertices of the d
         // ═══════════════════════════════════════════
         {
             "type": "NoiseMesh",
-            "planet": "peony-pavilion",
+            "planet": "viar",
             "seed": 131,
             "color1": "b8a050",
             "color2": "d0c068",
@@ -945,7 +945,7 @@ Desert max distance 0.719 **<** Forest max distance 0.755. All vertices of the d
         // ═══════════════════════════════════════════
         {
             "type": "NoiseMesh",
-            "planet": "peony-pavilion",
+            "planet": "viar",
             "seed": 199,
             "color1": "7a7a7a",
             "color2": "9a9a9a",
@@ -965,7 +965,7 @@ Desert max distance 0.719 **<** Forest max distance 0.755. All vertices of the d
         // ═══════════════════════════════════════════
         {
             "type": "NoiseMesh",
-            "planet": "peony-pavilion",
+            "planet": "viar",
             "seed": 241,
             "color1": "c0c8c080",
             "color2": "d8e0d860",
@@ -991,7 +991,7 @@ Desert max distance 0.719 **<** Forest max distance 0.755. All vertices of the d
 ### 6.1 Layer-by-Layer Parameter Deep-Dive
 
 > First, fields common to all layers:
-> - `"planet": "peony-pavilion"` — which planet this layer belongs to (used for obtaining position, rotation, etc. at runtime)
+> - `"planet": "viar"` — which planet this layer belongs to (used for obtaining position, rotation, etc. at runtime)
 > - `"persistence": 0.5` — amplitude decay between adjacent frequency layers in fractal noise. 0.5 is the Mindustry standard; no need to adjust
 > - `"colorPersistence": 0.5` — amplitude decay for color noise, same as above
 

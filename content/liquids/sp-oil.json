@@ -1,5 +1,5 @@
 {
-	// 牡丹亭"石油"——原版 oil 变种，数值抄自 Liquids.java
+	// 繁星"石油"——原版 oil 变种，数值抄自 Liquids.java
 	"color": "313131",
 	"viscosity": 0.75,
 	"flammability": 1.2,
