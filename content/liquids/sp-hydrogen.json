@@ -1,0 +1,11 @@
+{
+	// 牡丹亭"氢气"——原版 hydrogen 变种，数值抄自 Liquids.java
+	// 注意：原版 hydrogen 就是气体（gas: true），这里保持一致
+	"color": "9eabf7",
+	"gas": true,
+	"flammability": 1,
+	// 科技树：由水电解而来（文档"电解室"配方：水→氢气+氧气）
+	"research": {
+		"parent": "sp-water"
+	}
+}

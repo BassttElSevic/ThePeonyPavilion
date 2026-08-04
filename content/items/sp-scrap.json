@@ -1,0 +1,8 @@
+{
+	// 牡丹亭"废料"——原版 scrap 变种，数值抄原版
+	"color": "777777",
+	"cost": 0.5,
+	"research": {
+		"parent": "sp-damaged-core"
+	}
+}

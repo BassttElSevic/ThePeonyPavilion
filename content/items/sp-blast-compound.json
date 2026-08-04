@@ -1,0 +1,12 @@
+{
+	// 牡丹亭"爆炸混合物"——原版 blast-compound 变种，数值抄原版
+	"color": "ff795e",
+	"flammability": 0.4,
+	"explosiveness": 1.2,
+	"buildable": false,
+	// 科技树：依赖硫化物+乙醇/天然气（文档"爆炸物混合器"配方）。
+	// 硫化物(sulfide)是新增物品，JSON 后续补；先挂在 sp-coal 下过渡。
+	"research": {
+		"parent": "sp-coal"
+	}
+}

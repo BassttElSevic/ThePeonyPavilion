@@ -1,0 +1,11 @@
+{
+	// 牡丹亭"矿渣"——原版 slag 变种，数值抄自 Liquids.java
+	"color": "ffa166",
+	"temperature": 1,
+	"viscosity": 0.7,
+	"effect": "melting",
+	// 科技树：由废料熔炼而来（文档"坩埚"配方：废料→矿渣）
+	"research": {
+		"parent": "sp-scrap"
+	}
+}

@@ -1,0 +1,9 @@
+{
+	// 牡丹亭"沙子"——原版 sand 变种，数值抄原版
+	"color": "f7cba4",
+	"lowPriority": true,
+	"buildable": false,
+	"research": {
+		"parent": "sp-damaged-core"
+	}
+}

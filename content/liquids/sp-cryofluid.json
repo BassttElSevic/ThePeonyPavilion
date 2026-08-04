@@ -1,0 +1,12 @@
+{
+	// 牡丹亭"冷却液"——原版 cryofluid 变种，数值抄自 Liquids.java
+	"color": "6ecdec",
+	"heatCapacity": 0.9,
+	"temperature": 0.25,
+	"effect": "freezing",
+	"boilPoint": 0.55,
+	// 科技树：后期冷却剂，挂在水（水源基础）下
+	"research": {
+		"parent": "sp-water"
+	}
+}

@@ -1,0 +1,12 @@
+{
+	// 牡丹亭"塑钢"——原版 plastanium 变种，数值抄原版
+	"color": "cbd97f",
+	"flammability": 0.1,
+	"explosiveness": 0.2,
+	"cost": 1.3,
+	"healthScaling": 0.1,
+	// 科技树：由钛加工而来（文档"塑钢加工厂"配方：钛+油/燃油/乙醇→塑钢）
+	"research": {
+		"parent": "sp-titanium"
+	}
+}

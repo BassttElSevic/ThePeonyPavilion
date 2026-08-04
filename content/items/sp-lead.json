@@ -1,0 +1,11 @@
+{
+	// 牡丹亭"铅"——原版 lead 的独立变种
+	// 数值抄自原版 Items.java 的 lead（color/hardness/cost）
+	"color": "8c7fa9",
+	"hardness": 1,
+	"cost": 0.7,
+	// 科技树：挂在受损核心（科技树根）下，是最先能研究的资源之一
+	"research": {
+		"parent": "sp-damaged-core"
+	}
+}

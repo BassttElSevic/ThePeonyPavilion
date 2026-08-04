@@ -1,0 +1,10 @@
+{
+	// 牡丹亭"水"——原版 water 变种，数值抄自 Liquids.java
+	"color": "596ab8",
+	"heatCapacity": 0.4,
+	"effect": "wet",
+	"boilPoint": 0.5,
+	"research": {
+		"parent": "sp-damaged-core"
+	}
+}
