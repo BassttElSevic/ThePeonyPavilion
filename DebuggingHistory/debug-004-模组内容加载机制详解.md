@@ -486,6 +486,8 @@ if(allowPatching && locate(ContentType.block, name) != null){
 
 4. **解锁状态按内容名独立存储**：`UnlockableContent.java:94/250`——每个内容用 `Core.settings` 里的 `名字-unlocked` 键记录解锁。变种名字不同 → 解锁状态独立 → **打过原版战役的存档不会在牡丹亭"白嫖"解锁**（用户设计目标的机制保证）。
 
+5. **research 的 parent 有时序坑（重要，踩过）**：科技树节点在 `ContentParser.finishParsing()`（第 1006–1014 行）里按**解析顺序**批量构建（postreads），而解析顺序 = **ContentType 类型序（block 最先，item/liquid 在后）+ 文件名字母序**。所以 research.parent 必须满足：**parent 的解析早于 child**，否则 `ContentParser.java:1405` 报 "isn't in the tech tree" 警告，节点成孤儿、从科技树消失。踩到的 5 个反例：`sp-metaglass→sp-sand`、`sp-blast-compound→sp-coal`、`sp-cryofluid→sp-water`、`sp-hydrogen→sp-water`（同类型字母序在后）、`sp-core-mk1→sp-silicon`（block 先于 item）。**修复**：`mod.json` 的 `contentOrder` 把 4 个被引用的 parent（`sp-sand`/`sp-coal`/`sp-water`/`sp-silicon`）提前解析（Mods.java:882 按列表顺序先加载）。**规则：以后新增内容，parent 若字母序或类型序晚于 child，必须加进 contentOrder。**
+
 ## A.3 受损核心的技术方案（两个源码约束推导出来的）
 
 设计需求：开局就有、不可建造、不能发射、+4 单位、2000 容量。
