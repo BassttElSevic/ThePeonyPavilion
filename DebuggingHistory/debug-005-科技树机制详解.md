@@ -18,7 +18,8 @@
 > - `core/src/mindustry/mod/ContentParser.java`（第 1268–1423 行，JSON `research` 字段解析）
 > - `core/src/mindustry/type/Planet.java`（第 452–458 行，行星自动关联树根）
 > - `core/src/mindustry/world/Block.java`（第 1271–1282 行，默认研究成本公式）
-> - `core/src/mindustry/ctype/UnlockableContent.java`（第 205–207 行，物品/液体默认研究成本为空）
+> - `core/src/mindustry/ctype/UnlockableContent.java`（第 109–118 行 `loadIcon` 图标 fallback 链；第 205–207 行，物品/液体默认研究成本为空）
+> - `core/src/mindustry/mod/Mods.java`（第 382–426 行 `packSprites`，模组贴图打包命名）
 > - `core/src/mindustry/game/Objectives.java`（全文，5 种研究目标类型）
 > - `core/assets/bundles/bundle_zh_CN.properties`（第 236–238 行，`techtree.<名字>` 本地化 key）
 > - `Factory/Starfield/DebuggingHistory/debug-004-模组内容加载机制详解.md`（前作，JS+JSON 双轨制）
@@ -116,9 +117,143 @@ parent 指向哪个节点，就挂到哪个节点下面：
 
 ---
 
-## 三、游戏源码机制拆解
+## 三、完整例子：一条链从树根走到 I 型核心（Starfield 实况 + VE 对照）
 
-### 3.1 节点树本体（`TechTree.java`，204 行）
+前两节讲了"是什么"和"有哪几种写法"，但比较分散。这一节把它们**串成一个完整例子**：用繁星自己**真实的文件**，一步一步实现下面这条科技链，并在每步对照 VE 的原始文件。
+
+```text
+[root] sp-damaged-core（受损核心，开局就有）
+ ├─ sp-lead（铅）                ← 第 2 步：物品挂树根
+ └─ sp-sand（沙）
+      └─ sp-silicon（硅）            ← 第 3 步：物品挂物品
+           └─ sp-core-mk1（I 型核心）  ← 第 4 步：方块挂物品
+```
+
+> **先消除一个常见误解**：科技树**不是"在一个文件夹里集中建的"**。树根声明确实只有一个（在 `content/blocks/special/` 里，因为它恰好是个 CoreBlock、属于 blocks 类型），但**其他所有内容——物品、液体、方块、单位——都是在自己类型文件夹的 JSON 里写一行 `research` 挂上去的**。文件放哪个文件夹由内容类型决定，跟科技树无关。special 文件夹里只有 root，是因为 root 恰好是"特殊方块"。
+
+### 第 1 步：建树根（唯一需要"开新树"的地方）
+
+`content/blocks/special/sp-damaged-core.json`（现有文件，只看 research 字段）：
+
+```json
+"research": {
+  "root": true,       // ① 声明"从这里新开一棵树"
+  "name": "繁星",      // ② 行星科技树界面显示的树名
+  "planet": "viar"    // ③ 把树绑到 viar 行星
+}
+```
+
+三行的作用：
+
+- ① `root: true`：这棵树**没有父亲**，自己进 `TechTree.roots`。
+- ② `name`：行星选择器/科技树界面显示的标题（可被 bundle 的 `techtree.繁星` 覆盖，见 4.7）。
+- ③ `planet`：**树与行星绑定的唯一机制**（见 4.4）。viar 初始化时自动执行 `TechTree.roots.find(n -> n.planet == viar)`，找到这棵树作为自己的科技树入口。
+
+VE 对照（`content/blocks/tech-tree-only/core-nucleus-root.json`）——同样的三件套，只是 planet 换成 VE 的行星，另加两行：
+
+```json
+"research": {
+  "root": true,
+  "planet": "ve-cyclant",
+  "alwaysUnlocked": true,      // 开局自动解锁（不需要研究）
+  "researchCostMultiplier": 0  // 研究费乘 0（免费）
+}
+```
+
+> 为什么 VE 多这两行？VE 的树根是玩家"已有"的（游戏开局就带着它），不该出现在研究列表里，所以 `alwaysUnlocked` + 免费。繁星的受损核心开局由地图放置、`configurable: false` 不在建造菜单，天然不会被研究，所以没写这两行；以后想让它"可被研究解锁"再调整。
+
+### 第 2 步：挂第一个物品（物品 → 树根）
+
+`content/items/sp-lead.json`（现有文件）：
+
+```json
+{
+  "color": "8c7fa9",
+  "hardness": 1,
+  "cost": 0.7,
+  "research": {
+    "parent": "sp-damaged-core"   // 挂到"受损核心"节点下面
+  }
+}
+```
+
+关键理解：
+
+- **parent 写的是"内容名"（content name），不是文件名、不是文件夹名**。解析器在 `TechTree.all` 里找名字叫 `sp-damaged-core` 的节点（还会自动试带模组前缀的 `Starfield-sp-damaged-core`），找到就把铅挂到它下面。
+- 因为 blocks 类型**先于** items 解析，root（方块）天然比铅（物品）先存在——**物品挂方块不会踩时序坑**。
+- 研究消耗：物品默认 0 成本 + 自动"产出它"目标（见 4.5、4.6）——所以研究铅 = 弄到一块铅。
+
+VE 对照（`content/items/sitrullus/melon-dirt.json`）：同一件事的**字符串简写**版：
+
+```json
+"research": "core-nucleus-root-sitrullus"
+```
+
+字符串 = 只写 parent 的简写，效果与 `{ "parent": "..." }` 完全一样。**两种写法随意混用**，VE 两种都有。
+
+### 第 3 步：链式挂载（物品 → 物品）
+
+`content/items/sp-silicon.json`（现有文件）：
+
+```json
+{
+  "color": "53565c",
+  "cost": 0.8,
+  "research": {
+    "parent": "sp-sand"   // 硅的配方是"沙+煤→硅"，所以挂在沙下面
+  }
+}
+```
+
+挂谁不挂谁，**由玩法逻辑决定，不是技术限制**：硅由沙炼出 → 挂沙（`sp-sand`）；玩家先研究沙、再研究硅，科技树就有"递进感"。如果全挂 root，研究界面就是一层平铺，没有层级。
+
+顺带说明这里的字母序：`sp-sand`（sand）在 `sp-silicon`（silicon）前面（s-a < s-i），parent 先解析，**这条链不踩坑**。反过来 `sp-metaglass → sp-sand` 就会踩（m < s，child 先解析），详见第五节。
+
+### 第 4 步：方块挂物品 + 时序坑实战
+
+`content/blocks/special/sp-core-mk1.json`（现有文件）：
+
+```json
+"research": {
+  "parent": "sp-silicon"   // I 型核心由"数据链/计算"科技解锁
+}
+```
+
+这是**方块挂物品**：blocks 类型最先解析，items 在后——`sp-core-mk1` 解析时 `sp-silicon` 还不存在，直接触发第五节说的"isn't in the tech tree"警告。修复 = `mod.json` 的 `contentOrder`，把被引用的物品**提到最前面解析**：
+
+```json
+"contentOrder": ["sp-sand", "sp-coal", "sp-water", "sp-silicon"]
+```
+
+`contentOrder` 里的四个物品不参与字母序排序、直接最先加载（Mods.java:882），于是 I 型核心挂硅时，硅已经在树里了。
+
+VE 对照：`content/blocks/turrets/bake.json` → `"research": { "parent": "rise" }`——bake 和 rise 都是**方块**，类型相同，bake(b) < rise(r) 也满足"parent 先解析"，VE 不需要 contentOrder。**只有"方块挂物品"这类类型倒挂，才必须借助 contentOrder**。
+
+### 第 5 步：研究成本怎么来的
+
+这条链里：
+
+- 三个物品（铅、沙、硅）——**0 成本** + 自动"产出"目标（默认）。
+- I 型核心（方块）——默认按建造需求算（见 4.5 公式）：`requirements` 是 `iron/1000 + sp-lead/1000`，研究费大致 = 每个材料 `60 + 数量^1.11 × 20`，再乘 `researchCostMultiplier`（默认 1）。
+- 想改：`"researchCostMultiplier": 0.35`（乘系数）或 `"research": { "requirements": ["iron/500", "sp-silicon/200"] }`（完全自定义）。
+
+### 第 6 步：游戏里实际看到的效果
+
+启动游戏 → 行星界面选 viar → 点"科技树"：
+
+1. 左上角树名显示"繁星"（第 1 步的 `name`）；
+2. 根节点是受损核心，下面直接挂着铅和沙——**开局即可研究**；
+3. 点硅：显示"需要先研究沙"（因为挂载关系）+ "需要 1 块沙"（Produce 目标）——研究完沙才能研究硅；
+4. 点 I 型核心：显示"需要先研究硅" + 材料消耗（第 5 步算出来的）——研究完硅、交完材料，解锁 I 型核心的建造权限；
+5. 回到 viar 星球，就能在受损核心周围的核心区域建造 I 型核心了。
+
+**一句话总结全流程**：root 声明"开树+绑行星"（只做一次）→ 每个内容在自己 JSON 里写 `research`，parent 指向"想让它挂在谁下面" → 内容名写对、parent 解析够早，树就长对了。
+
+---
+
+## 四、游戏源码机制拆解
+
+### 4.1 节点树本体（`TechTree.java`，204 行）
 
 这是科技树的"数据结构"文件。要点：
 
@@ -129,7 +264,7 @@ parent 指向哪个节点，就挂到哪个节点下面：
   1. 从内容往父亲方向回溯，**继承** `planet`、`researchCostMultipliers`（成本倍率）。
   2. 把内容的**依赖**（`content.getDependencies`）自动变成 `Research` 目标——比如一个方块依赖某种物品，研究它时自动要求先研究该物品。
 
-### 3.2 原版怎么建树（`SerpuloTechTree.java` / `ErekirTechTree.java`）
+### 4.2 原版怎么建树（`SerpuloTechTree.java` / `ErekirTechTree.java`）
 
 原版（非模组）的科技树是**代码**写的，格式是嵌套 lambda：
 
@@ -147,7 +282,7 @@ Planets.serpulo.techTree = nodeRoot("serpulo", coreShard, () -> {
 
 括号嵌套 = 树的层级。**这是给游戏本体用的方式，模组不需要这么做**——模组走 3.3 的 JSON 解析器即可。知道它的存在只是为了理解"树最终长什么样"。
 
-### 3.3 JSON 解析器（`ContentParser.java:1268–1423`）——核心中的核心
+### 4.3 JSON 解析器（`ContentParser.java:1268–1423`）——核心中的核心
 
 这是模组科技树的真正入口。`readFields` 一进来就把 `research` 从 JSON 里 **remove 出来单独处理**，完整流程：
 
@@ -164,10 +299,10 @@ Planets.serpulo.techTree = nodeRoot("serpulo", coreShard, () -> {
 
 > **从流程可以看出两个关键点**：
 >
-> 1. parent 匹配支持简写，但**必须已存在**——这直接导致第四节那个时序坑。
-> 2. `root: true` 的节点 `"name"` 字段就是行星科技树界面的标题（配合 bundle 本地化，见 3.7）。
+> 1. parent 匹配支持简写，但**必须已存在**——这直接导致第五节那个时序坑。
+> 2. `root: true` 的节点 `"name"` 字段就是行星科技树界面的标题（配合 bundle 本地化，见 4.7）。
 
-### 3.4 行星自动关联（`Planet.java:452–458`）
+### 4.4 行星自动关联（`Planet.java:452–458`）
 
 行星 `init()` 时执行：
 
@@ -183,7 +318,7 @@ if(techTree != null && autoAssignPlanet){
 
 **所以 root 节点的 `"planet"` 字段，就是把这棵树挂到行星上的唯一机制**。viar 行星会在 init 时自己找到"繁星"树——这就是为什么 `sp-damaged-core.json` 里那句 `"planet": "viar"` 如此关键。子节点的 planet 是从父亲一路继承下来的，不需要每个都写。
 
-### 3.5 研究成本公式（`Block.java:1271–1282`）
+### 4.5 研究成本公式（`Block.java:1271–1282`）
 
 方块（可建造建筑）的默认研究消耗按**建造需求**计算：
 
@@ -196,17 +331,17 @@ if(techTree != null && autoAssignPlanet){
 - 物品/液体**没有默认消耗**（`UnlockableContent.researchRequirements()` 返回空数组）→ 研究它们只需满足 `Produce` 目标（造出它）。
 - 树根想开局免费 → `"alwaysUnlocked": true` + `"researchCostMultiplier": 0`（VE 的 root 就是这么写的）。
 
-### 3.6 研究目标类型（`Objectives.java`，全文只有 5 种）
+### 4.6 研究目标类型（`Objectives.java`，全文只有 5 种）
 
 | 类型 | 含义 | 典型用途 |
 | --- | --- | --- |
-| `Research` | 研究某内容 | 自动从内容依赖生成（3.1 第 2 点） |
+| `Research` | 研究某内容 | 自动从内容依赖生成（4.1 第 2 点） |
 | `Produce` | 产出某内容 | 物品/液体自动添加 |
 | `SectorComplete` | 通关某区块 | 把科技锁在战役后期 |
 | `OnSector` | **到达**某区块 | VE 的主力：`{"type":"OnSector","preset":"warp-tech-base"}` |
 | `OnPlanet` | 到达某行星 | 跨行星科技 |
 
-### 3.7 bundle 本地化（`techtree.<名字>` key）
+### 4.7 bundle 本地化（`techtree.<名字>` key）
 
 原版示例（`bundle_zh_CN.properties` 第 236–238 行）：
 
@@ -218,11 +353,33 @@ techtree.erekir = 埃里克尔
 
 节点显示名规则（`TechTree.java` 的 `localizedName()`）：`Core.bundle.get("techtree." + name, name)` —— **bundle 里有 `techtree.<name>` 就用它，没有就 fallback 到 name 本身**。所以 root 的 `name` 用中文（如"繁星"）也能正常显示，不写 bundle key 也不会崩；想用英文内部名 + 中文显示名，就加一条 `techtree.<内部名> = 繁星`。
 
+### 4.8 节点图标（icon）——默认就是内容贴图，零配置
+
+科技树界面每个节点上的图标（`ResearchDialog` 里 `node.icon()` 画出来的），**默认就是内容自己的贴图**。不需要任何 icon 代码、不需要建任何图标文件：只要内容的贴图存在，节点图标自动就有。VE 的 tech-tree-only 就是证据——scripts 里 grep 不到任何 icon 代码。
+
+机制链路（3 跳，全部自动）：
+
+1. **节点 → 内容**（`TechTree.java:159-161`）：节点没手动设过 `icon` 字段，就返回 `new TextureRegionDrawable(content.uiIcon)`。
+2. **uiIcon → 贴图**（`UnlockableContent.java:117-118`）：优先找 `<类型>-<内容名>-ui`（如 `item-sp-lead-ui`），没有就退回 fullIcon。
+3. **fullIcon 的 fallback 链**（`UnlockableContent.java:110-116`），从最优先到最次：`fullOverride`（JSON 手动指定）→ `<类型>-<内容名>-full` → `<内容名>-full` → **`<内容名>`** → `<类型>-<内容名>` → `<内容名>1`。
+
+为什么模组"自动命中"：模组贴图打包时（`Mods.java:382-426` 的 `packSprites`），`sprites/` 下所有 png **递归收集**（子目录无所谓，只看文件名），atlas 名 = **`模组名-文件名`**（如 `sprites/items/iron.png` → `Starfield-iron`）；而模组内容名（transformName 处理过）也是 `Starfield-iron`。**两者一致 → 第 4 条 `<内容名>` 直接命中。** 子目录（blocks/items/tech-tree-only/…）纯属组织习惯，不影响加载。
+
+VE 案例：`content/blocks/tech-tree-only/core-nucleus-root.json` 是个"假方块"（`buildVisibility: editorOnly`，不在建造菜单、只活在科技树里）——它的节点图标 = 它自己的贴图 `sprites/blocks/tech-tree-only/core-nucleus-root.png`，自动生效。另注意：`sprites/items/tech-tree-only/lead-node.png` 这类是 `content/unused/` 里**废弃内容**的贴图残留（unused 文件夹不加载），不是当前机制的一部分，别被误导。
+
+想自定义图标（跟建造贴图区分）时：
+
+- 放一张 `<内容名>-ui.png`（如 `sprites/items/sp-lead-ui.png`）→ UI（含科技树节点）用这张，建造/实体仍用原贴图；
+- JSON 写 `"fullOverride": "另一张atlas名"` → 强制整条链用指定贴图；
+- JS 手动 `node.icon = ...`（JSON 路线不建议混用）。
+
+> ⚠️ **Starfield 现状**：`sprites/` 下 37 张贴图齐全，但 **`blocks/` 目录是空的**——`sp-damaged-core` 和 `sp-core-mk1` 两个 CoreBlock 没有贴图 → fallback 链全落空 → 显示 Arc 的 **error 纹理**（洋红色的错误图）。**科技树根节点图标（受损核心）现在就是 error 纹理**。要修只需补两张图：`sprites/blocks/special/sp-damaged-core.png` 和 `sprites/blocks/special/sp-core-mk1.png`（3×3 方块 = 96×96px，1×1 格 = 32px）。
+
 ---
 
-## 四、时序坑：`contentOrder` 规则（务必遵守）
+## 五、时序坑：`contentOrder` 规则（务必遵守）
 
-科技树节点在 `ContentParser.finishParsing()` 里**按解析顺序**批量挂接（3.3 的 postreads），而解析顺序 = **ContentType 类型序（block 最先，item/liquid 在后）+ 文件名字母序**（见 debug-004 第五节）。
+科技树节点在 `ContentParser.finishParsing()` 里**按解析顺序**批量挂接（4.3 的 postreads），而解析顺序 = **ContentType 类型序（block 最先，item/liquid 在后）+ 文件名字母序**（见 debug-004 第五节）。
 
 **规则：parent 的解析必须早于 child**，否则 `ContentParser.java:1405` 报 `"Content 'XXX' isn't in the tech tree"` 警告，节点成孤儿、从科技树消失。
 
@@ -240,7 +397,7 @@ techtree.erekir = 埃里克尔
 
 ---
 
-## 五、Starfield 现状盘点
+## 六、Starfield 现状盘点
 
 ### ✅ 已有（挂树完成）
 
@@ -255,17 +412,17 @@ techtree.erekir = 埃里克尔
 
 `scripts/items.js` 里注册的 **26 个新物品 + 4 个新液体**（iron、cobalt、gold、uranium、steel、computer-chip、data-unit、lead-capacitor、nuclear-capacitor、super-capacitor、uranium-fuelrod、thorium-fuelrod、autocannon-ammo、artillery-ammo、missile-ammobox、salt、wood、sulfide、crystal、ice、refined-oil、ethanol、oxygen、natural-gas…）**只有 JS 壳子，没有 JSON 文件，也就没有 research**——它们目前不在任何科技树里，研究界面看不到、战役里无法解锁。
 
-另外：bundle 里还没有 `techtree.繁星` 相关 key（不写也能显示，见 3.7）。
+另外：bundle 里还没有 `techtree.繁星` 相关 key（不写也能显示，见 4.7）。
 
 ---
 
-## 六、Starfield 科技树该怎么写（建议）
+## 七、Starfield 科技树该怎么写（建议）
 
-### 6.1 路线选择：继续纯 JSON 声明式
+### 7.1 路线选择：继续纯 JSON 声明式
 
 与 VE、与繁星现有代码风格完全一致。**不要混用 JS `TechTree.node()`**——两套体系混用会让 parent 时序更难判断，也违背"壳子归 JS、属性归 JSON"的双轨制。
 
-### 6.2 建议的树结构（分层示意，具体以设计文档为准）
+### 7.2 建议的树结构（分层示意，具体以设计文档为准）
 
 ```text
 [root] sp-damaged-core（viar，开局免费）
@@ -284,7 +441,7 @@ techtree.erekir = 埃里克尔
  └─ 新液体层：refined-oil / ethanol / oxygen / natural-gas（挂对应原料或 root）
 ```
 
-### 6.3 每个新内容只需一行对象
+### 7.3 每个新内容只需一行对象
 
 ```json
 // content/items/steel.json
@@ -299,13 +456,13 @@ techtree.erekir = 埃里克尔
 
 注意：如果 `data-unit` 的 JSON 字母序比 `sp-core-mk1` 晚（d < s，实际早），而未来 `sp-core-mk1` 改挂它，要检查双方解析顺序并同步更新 `contentOrder`。
 
-### 6.4 成本策略
+### 7.4 成本策略
 
 - **物品/液体：留默认**（0 成本 + 自动 Produce 目标）——研究物品只需造出它，手感最顺，与 VE 一致。
 - **生产方块：** 用 `researchCostMultiplier`（0.3~1.0）微调；要精确控制就写 `"research": { "requirements": [...] }`。
 - **核心/特殊方块：** 抄 VE root 写法（`alwaysUnlocked: true` + `researchCostMultiplier: 0`）。
 
-### 6.5 战役锁科技（后续做区块时）
+### 7.5 战役锁科技（后续做区块时）
 
 高级科技加 objectives，玩家必须先到达/占领某区块才能研究：
 
@@ -318,14 +475,14 @@ techtree.erekir = 埃里克尔
 
 区块预设要先定义好（`content/sectors/` + 区块地图），VE 的 `warp-tech-base` 是完整范例。
 
-### 6.6 收尾
+### 7.6 收尾
 
-- bundle 补 `techtree.繁星 = 繁星`（可选，3.7 讲过 fallback）。
+- bundle 补 `techtree.繁星 = 繁星`（可选，4.7 讲过 fallback）。
 - 每新增一个带 research 的 JSON，过一遍第七节的检查清单。
 
 ---
 
-## 七、速查清单（新增科技树节点时逐条核对）
+## 八、速查清单（新增科技树节点时逐条核对）
 
 1. □ 内容是 UnlockableContent（物品/液体/方块/单位/区块）——只有这些能上科技树。
 2. □ `research` 写了：字符串简写 或 对象里的 `parent`。
@@ -348,5 +505,7 @@ techtree.erekir = 埃里克尔
 | 行星 ↔ 树根关联 | `type/Planet.java:452-458` |
 | 方块默认研究成本 | `world/Block.java:1271-1282` |
 | 物品/液体默认成本 | `ctype/UnlockableContent.java:205-207` |
+| 节点图标默认来源 | `TechTree.java` 的 `icon()`、`ctype/UnlockableContent.java` 的 `loadIcon()` |
+| 模组贴图打包命名 | `mod/Mods.java:382-426`（`packSprites`） |
 | 目标类型清单 | `game/Objectives.java` |
 | 树名本地化 | `TechTree.java` 的 `localizedName()`、bundle 的 `techtree.*` |

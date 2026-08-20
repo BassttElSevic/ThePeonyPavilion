@@ -18,7 +18,8 @@
 > - `core/src/mindustry/mod/ContentParser.java` (lines 1268–1423, JSON `research` field parsing)
 > - `core/src/mindustry/type/Planet.java` (lines 452–458, planets auto-link to tree roots)
 > - `core/src/mindustry/world/Block.java` (lines 1271–1282, default research cost formula)
-> - `core/src/mindustry/ctype/UnlockableContent.java` (lines 205–207, items/liquids have no default research cost)
+> - `core/src/mindustry/ctype/UnlockableContent.java` (lines 109–118 `loadIcon` icon fallback chain; lines 205–207, items/liquids have no default research cost)
+> - `core/src/mindustry/mod/Mods.java` (lines 382–426 `packSprites`, mod sprite packing/naming)
 > - `core/src/mindustry/game/Objectives.java` (entire file, 5 research objective types)
 > - `core/assets/bundles/bundle_zh_CN.properties` (lines 236–238, `techtree.<name>` localization keys)
 > - `Factory/Starfield/DebuggingHistory/debug-004-模组内容加载机制详解.md` (previous entry, JS+JSON dual-track system)
@@ -116,9 +117,143 @@ The parent points at a node; this content hangs under it:
 
 ---
 
-## 3. Game Source Mechanics, Piece by Piece
+## 3. A Complete Example: One Chain from the Root to the Type-I Core (Starfield in Action + VE Side-by-Side)
 
-### 3.1 The Node Tree Itself (`TechTree.java`, 204 lines)
+The first two sections covered "what it is" and "the two forms," but that can feel scattered. This section ties them together into **one complete example** using Starfield's own **real files**, building the chain below step by step, with VE's original files alongside at every step.
+
+```text
+[root] sp-damaged-core (Damaged Core, present from the start)
+ ├─ sp-lead (Lead)                    ← Step 2: item hangs under the root
+ └─ sp-sand (Sand)
+      └─ sp-silicon (Silicon)             ← Step 3: item hangs under item
+           └─ sp-core-mk1 (Type-I Core)    ← Step 4: block hangs under item
+```
+
+> **First, clear up a common misconception**: the tech tree is **not "built centrally in one folder."** The root declaration is indeed singular (it lives in `content/blocks/special/` because it happens to be a CoreBlock, i.e. a blocks-type content), but **every other content — items, liquids, blocks, units — attaches itself with a single `research` line in a JSON file inside its own type's folder**. Which folder a file lives in is decided by content type, not by the tech tree. The special folder only holds the root because the root happens to be a "special block."
+
+### Step 1: Create the tree root (the only place you "open a new tree")
+
+`content/blocks/special/sp-damaged-core.json` (existing file — look at the research field only):
+
+```json
+"research": {
+  "root": true,       // ① declare "start a new tree from here"
+  "name": "繁星",      // ② tree name shown in the planet tech-tree screen
+  "planet": "viar"    // ③ bind the tree to planet viar
+}
+```
+
+What each line does:
+
+- ① `root: true`: this tree has **no parent**; the node enters `TechTree.roots` by itself.
+- ② `name`: the title shown in the planet selector / tech-tree screen (overridable by the bundle key `techtree.繁星`, see 4.7).
+- ③ `planet`: **the only mechanism that binds a tree to a planet** (see 4.4). During init, viar runs `TechTree.roots.find(n -> n.planet == viar)` and finds this tree as its tech-tree entry.
+
+VE side-by-side (`content/blocks/tech-tree-only/core-nucleus-root.json`) — the same trio, just with VE's planet, plus two extra lines:
+
+```json
+"research": {
+  "root": true,
+  "planet": "ve-cyclant",
+  "alwaysUnlocked": true,      // unlocked from the start (no research needed)
+  "researchCostMultiplier": 0  // research cost × 0 (free)
+}
+```
+
+> Why does VE have those two extra lines? VE's root is something the player already "has" (they start the game with it), so it must not show up in the research list — hence `alwaysUnlocked` + free. Starfield's Damaged Core is placed by the map at start and has `configurable: false` (not in the build menu), so it can't be researched anyway; those two lines were omitted. Add them later if you want it to become researchable.
+
+### Step 2: Hang the first item (item → root)
+
+`content/items/sp-lead.json` (existing file):
+
+```json
+{
+  "color": "8c7fa9",
+  "hardness": 1,
+  "cost": 0.7,
+  "research": {
+    "parent": "sp-damaged-core"   // hang under the "Damaged Core" node
+  }
+}
+```
+
+Key points:
+
+- **`parent` is written as the "content name," not the file name, not the folder name.** The parser looks up a node named `sp-damaged-core` in `TechTree.all` (it also tries the mod-prefixed form `Starfield-sp-damaged-core` automatically), then hangs Lead under it.
+- Because blocks parse **before** items, the root (a block) naturally exists before Lead (an item) — **an item hanging under a block never hits the parse-order pitfall**.
+- Research cost: items default to 0 cost + an automatic "produce it" objective (see 4.5, 4.6) — so researching Lead = getting hold of one Lead.
+
+VE side-by-side (`content/items/sitrullus/melon-dirt.json`): the same thing in **string shorthand**:
+
+```json
+"research": "core-nucleus-root-sitrullus"
+```
+
+A string is just shorthand for writing only the parent; it behaves exactly like `{ "parent": "..." }`. **You can mix the two forms freely** — VE uses both.
+
+### Step 3: Chained attachment (item → item)
+
+`content/items/sp-silicon.json` (existing file):
+
+```json
+{
+  "color": "53565c",
+  "cost": 0.8,
+  "research": {
+    "parent": "sp-sand"   // Silicon's recipe is "sand + coal → silicon", so it hangs under sand
+  }
+}
+```
+
+What hangs where is **decided by gameplay logic, not by any technical constraint**: Silicon is refined from sand → hang it under `sp-sand`; the player researches Sand first, then Silicon, giving the tree a sense of progression. If everything hung under the root, the research screen would be one flat layer with no depth.
+
+Note the alphabetical order here: `sp-sand` (sand) sorts before `sp-silicon` (silicon) (s-a < s-i), so the parent parses first — **this chain is safe**. The reverse case `sp-metaglass → sp-sand` would trip the pitfall (m < s, child parses first); see Section 5.
+
+### Step 4: A block hanging under an item + the parse-order pitfall in practice
+
+`content/blocks/special/sp-core-mk1.json` (existing file):
+
+```json
+"research": {
+  "parent": "sp-silicon"   // Type-I Core unlocked via the "data-chain/computing" tech
+}
+```
+
+This is a **block hanging under an item**: blocks parse first, items later — so when `sp-core-mk1` parses, `sp-silicon` doesn't exist yet, triggering the "isn't in the tech tree" warning from Section 5. The fix is `mod.json`'s `contentOrder`, which forces the referenced items to parse **first**:
+
+```json
+"contentOrder": ["sp-sand", "sp-coal", "sp-water", "sp-silicon"]
+```
+
+The four items in `contentOrder` skip alphabetical ordering and load first (Mods.java:882), so by the time the Type-I Core attaches to Silicon, Silicon is already in the tree.
+
+VE side-by-side: `content/blocks/turrets/bake.json` → `"research": { "parent": "rise" }` — bake and rise are both **blocks**, same type, and bake(b) < rise(r) also satisfies "parent parses first," so VE needs no contentOrder. **Only type-inverted cases like "block under item" require contentOrder.**
+
+### Step 5: Where the research cost comes from
+
+On this chain:
+
+- The three items (Lead, Sand, Silicon) — **0 cost** + automatic "produce" objective (default).
+- The Type-I Core (a block) — cost defaults to the formula over its build requirements (see 4.5): `requirements` is `iron/1000 + sp-lead/1000`, so each material costs roughly `60 + amount^1.11 × 20`, times `researchCostMultiplier` (default 1).
+- To change it: `"researchCostMultiplier": 0.35` (scale by factor) or `"research": { "requirements": ["iron/500", "sp-silicon/200"] }` (fully custom).
+
+### Step 6: What you actually see in-game
+
+Launch the game → planet screen → select viar → open the "Tech Tree":
+
+1. The tree title in the top-left reads "繁星" (the `name` from Step 1);
+2. The root node is the Damaged Core, with Lead and Sand hanging directly under it — **researchable from the start**;
+3. Click Silicon: it shows "requires Sand to be researched first" (from the attachment) + "need 1 Sand" (Produce objective) — you must research Sand before Silicon;
+4. Click the Type-I Core: it shows "requires Silicon" + the material cost (computed in Step 5) — research Silicon, pay the materials, and the Type-I Core's build permission unlocks;
+5. Back on viar, you can now build the Type-I Core in the core zone around the Damaged Core.
+
+**One-sentence summary of the whole flow**: the root declares "open a tree + bind a planet" (done once) → every content writes `research` in its own JSON, with `parent` pointing at "whoever it should hang under" → get the content name right and parse the parent early enough, and the tree grows correctly.
+
+---
+
+## 4. Game Source Mechanics, Piece by Piece
+
+### 4.1 The Node Tree Itself (`TechTree.java`, 204 lines)
 
 This is the tech tree's "data structure" file. Key points:
 
@@ -129,7 +264,7 @@ This is the tech tree's "data structure" file. Key points:
   1. Walks back toward the root and **inherits** `planet` and `researchCostMultipliers` (cost multipliers).
   2. Turns the content's **dependencies** (`content.getDependencies`) into automatic `Research` objectives — e.g. if a block depends on an item, researching the block automatically requires researching that item first.
 
-### 3.2 How Vanilla Builds Trees (`SerpuloTechTree.java` / `ErekirTechTree.java`)
+### 4.2 How Vanilla Builds Trees (`SerpuloTechTree.java` / `ErekirTechTree.java`)
 
 Vanilla (non-mod) tech trees are **written in code**, as nested lambdas:
 
@@ -147,7 +282,7 @@ Planets.serpulo.techTree = nodeRoot("serpulo", coreShard, () -> {
 
 Parenthesis nesting = tree depth. **This is for the game itself; mods don't need to do this** — mods use the JSON parser from 3.3. Knowing it exists is only to understand "what the final tree looks like."
 
-### 3.3 The JSON Parser (`ContentParser.java:1268–1423`) — the Heart of It All
+### 4.3 The JSON Parser (`ContentParser.java:1268–1423`) — the Heart of It All
 
 This is the real entry point for mod tech trees. `readFields` **removes** `research` from the JSON up front and handles it separately. Full flow:
 
@@ -164,10 +299,10 @@ This is the real entry point for mod tech trees. `readFields` **removes** `resea
 
 > **Two key takeaways from this flow**:
 >
-> 1. Parent matching supports shorthand, but the parent **must already exist** — which directly causes the parse-order pitfall in Section 4.
-> 2. The root node's `"name"` field is the title of the planet's tech tree screen (with bundle localization, see 3.7).
+> 1. Parent matching supports shorthand, but the parent **must already exist** — which directly causes the parse-order pitfall in Section 5.
+> 2. The root node's `"name"` field is the title of the planet's tech tree screen (with bundle localization, see 4.7).
 
-### 3.4 Planet Auto-Linking (`Planet.java:452–458`)
+### 4.4 Planet Auto-Linking (`Planet.java:452–458`)
 
 A planet's `init()` runs:
 
@@ -183,7 +318,7 @@ if(techTree != null && autoAssignPlanet){
 
 **So the root node's `"planet"` field is the only mechanism that attaches a tree to a planet.** Viar finds the "Starfield" tree by itself during init — that's why `"planet": "viar"` in `sp-damaged-core.json` is so critical. Child nodes inherit their planet from the parent all the way down; you don't write it on every node.
 
-### 3.5 The Research Cost Formula (`Block.java:1271–1282`)
+### 4.5 The Research Cost Formula (`Block.java:1271–1282`)
 
 A block's (buildable building's) default research cost is computed from its **build requirements**:
 
@@ -196,17 +331,17 @@ per-item cost = round( 60 × mult + buildReqAmount^1.11 × 20 × mult , 10 )
 - Items/liquids have **no default cost** (`UnlockableContent.researchRequirements()` returns an empty array) → researching them only requires the `Produce` objective (build/produce it).
 - Want a tree root free from the start → `"alwaysUnlocked": true` + `"researchCostMultiplier": 0` (that's exactly how VE's roots are written).
 
-### 3.6 Research Objective Types (`Objectives.java` — exactly 5 in the whole file)
+### 4.6 Research Objective Types (`Objectives.java` — exactly 5 in the whole file)
 
 | Type | Meaning | Typical use |
 | --- | --- | --- |
-| `Research` | Research some content | Auto-generated from content dependencies (3.1 point 2) |
+| `Research` | Research some content | Auto-generated from content dependencies (4.1 point 2) |
 | `Produce` | Produce some content | Auto-added to items/liquids |
 | `SectorComplete` | Complete a sector | Lock tech behind late-campaign progress |
 | `OnSector` | **Reach** a sector | VE's workhorse: `{"type":"OnSector","preset":"warp-tech-base"}` |
 | `OnPlanet` | Reach a planet | Cross-planet tech |
 
-### 3.7 Bundle Localization (`techtree.<name>` key)
+### 4.7 Bundle Localization (`techtree.<name>` key)
 
 Vanilla example (`bundle_zh_CN.properties` lines 236–238):
 
@@ -218,11 +353,33 @@ techtree.erekir = 埃里克尔
 
 Node display name rule (`TechTree.java`'s `localizedName()`): `Core.bundle.get("techtree." + name, name)` — **if the bundle has `techtree.<name>` it's used, otherwise it falls back to the name itself**. So a Chinese `name` (like "繁星") displays fine with no bundle key and won't crash; if you want an ASCII internal name with a localized display name, add a `techtree.<internal-name> = 繁星` entry.
 
+### 4.8 Node Icons (`icon`) — by Default, Just the Content's Own Sprite, Zero Config
+
+The icon on every tech-tree node (drawn by `node.icon()` in `ResearchDialog`) is **by default the content's own sprite**. No icon code, no icon files needed: as long as the content's sprite exists, the node icon appears automatically. VE's tech-tree-only folder is the proof — grep finds no icon code in its scripts at all.
+
+The mechanism chain (3 hops, all automatic):
+
+1. **Node → content** (`TechTree.java:159-161`): if the node's `icon` field was never set manually, `icon()` returns `new TextureRegionDrawable(content.uiIcon)`.
+2. **uiIcon → sprite** (`UnlockableContent.java:117-118`): it first looks for `<type>-<contentName>-ui` (e.g. `item-sp-lead-ui`), falling back to fullIcon.
+3. **fullIcon's fallback chain** (`UnlockableContent.java:110-116`), from most preferred to least: `fullOverride` (manually set in JSON) → `<type>-<contentName>-full` → `<contentName>-full` → **`<contentName>`** → `<type>-<contentName>` → `<contentName>1`.
+
+Why mods "auto-hit": when mod sprites are packed (`Mods.java:382-426`, `packSprites`), every png under `sprites/` is **collected recursively** (subfolders don't matter, only the file name), and the atlas name is **`modname-filename`** (e.g. `sprites/items/iron.png` → `Starfield-iron`); a mod content's name (after transformName) is also `Starfield-iron`. **The two match → entry 4 (`<contentName>`) hits directly.** Subfolders (blocks/items/tech-tree-only/…) are purely organizational; they don't affect loading.
+
+VE case study: `content/blocks/tech-tree-only/core-nucleus-root.json` is a "fake block" (`buildVisibility: editorOnly` — not in the build menu, alive only in the tech tree) — its node icon is its own sprite `sprites/blocks/tech-tree-only/core-nucleus-root.png`, working automatically. Also note: sprites like `sprites/items/tech-tree-only/lead-node.png` are leftovers of **discarded content** in `content/unused/` (the unused folder is not loaded); they are not part of the current mechanism — don't be misled by them.
+
+To customize an icon (distinct from the build sprite):
+
+- Drop a `<contentName>-ui.png` (e.g. `sprites/items/sp-lead-ui.png`) → UI (including the tech-tree node) uses it, while the build/entity keeps the original sprite;
+- Write `"fullOverride": "some-other-atlas-name"` in JSON → force the whole chain to use that sprite;
+- Set `node.icon = ...` manually in JS (not recommended when on the JSON route).
+
+> ⚠️ **Starfield current state**: all 37 sprites under `sprites/` are present, but the **`blocks/` folder is empty** — `sp-damaged-core` and `sp-core-mk1` have no sprites, so the whole fallback chain misses and they show Arc's **error texture** (a magenta error image). **The tech-tree root node icon (Damaged Core) is currently that error texture.** Fixing it just needs two sprites: `sprites/blocks/special/sp-damaged-core.png` and `sprites/blocks/special/sp-core-mk1.png` (a 3×3 block = 96×96 px; a 1×1 tile = 32 px).
+
 ---
 
-## 4. The Parse-Order Pitfall: the `contentOrder` Rule (must follow)
+## 5. The Parse-Order Pitfall: the `contentOrder` Rule (must follow)
 
-Tech nodes are attached in **parse order** during `ContentParser.finishParsing()` (the postreads from 3.3), and parse order = **ContentType order (blocks first, items/liquids later) + file-name alphabetical order** (see debug-004 Section 5).
+Tech nodes are attached in **parse order** during `ContentParser.finishParsing()` (the postreads from 4.3), and parse order = **ContentType order (blocks first, items/liquids later) + file-name alphabetical order** (see debug-004 Section 5).
 
 **Rule: the parent must parse before the child**, otherwise `ContentParser.java:1405` warns `"Content 'XXX' isn't in the tech tree"`, and the node becomes an orphan — gone from the tree.
 
@@ -240,7 +397,7 @@ The fix = `mod.json`'s `contentOrder`, which forces the referenced parents to pa
 
 ---
 
-## 5. Starfield Current State
+## 6. Starfield Current State
 
 ### ✅ Already done (on the tree)
 
@@ -255,17 +412,17 @@ The fix = `mod.json`'s `contentOrder`, which forces the referenced parents to pa
 
 The **26 new items + 4 new liquids** registered in `scripts/items.js` (iron, cobalt, gold, uranium, steel, computer-chip, data-unit, lead-capacitor, nuclear-capacitor, super-capacitor, uranium-fuelrod, thorium-fuelrod, autocannon-ammo, artillery-ammo, missile-ammobox, salt, wood, sulfide, crystal, ice, refined-oil, ethanol, oxygen, natural-gas…) have **only JS shells — no JSON files, therefore no research**. They're on no tech tree right now: invisible in the research screen, unlockable nowhere in the campaign.
 
-Also: the bundle has no `techtree.繁星`-style key yet (not required to display, see 3.7).
+Also: the bundle has no `techtree.繁星`-style key yet (not required to display, see 4.7).
 
 ---
 
-## 6. How the Starfield Tech Tree Should Be Written (recommendations)
+## 7. How the Starfield Tech Tree Should Be Written (recommendations)
 
-### 6.1 Route: keep it pure JSON declaration
+### 7.1 Route: keep it pure JSON declaration
 
 Consistent with VE and with Starfield's existing code style. **Don't mix in JS `TechTree.node()`** — mixing the two systems makes parent ordering much harder to reason about, and violates the "shells in JS, properties in JSON" dual-track principle.
 
-### 6.2 Suggested tree structure (layered sketch; defer to the design doc)
+### 7.2 Suggested tree structure (layered sketch; defer to the design doc)
 
 ```text
 [root] sp-damaged-core (viar, free at start)
@@ -284,7 +441,7 @@ Consistent with VE and with Starfield's existing code style. **Don't mix in JS `
  └─ New liquids: refined-oil / ethanol / oxygen / natural-gas (under their feedstock or the root)
 ```
 
-### 6.3 One line per new content
+### 7.3 One line per new content
 
 ```json
 // content/items/steel.json
@@ -299,13 +456,13 @@ Consistent with VE and with Starfield's existing code style. **Don't mix in JS `
 
 Note: if `data-unit`'s JSON alphabetically sorts before `sp-core-mk1` (d < s, so it does), and `sp-core-mk1` is later re-parented under it, check both parse orders and update `contentOrder` accordingly.
 
-### 6.4 Cost strategy
+### 7.4 Cost strategy
 
 - **Items/liquids: keep the default** (0 cost + auto Produce) — researching an item just requires producing it; feels best, consistent with VE.
 - **Production blocks:** tune with `researchCostMultiplier` (0.3–1.0); for exact control write `"research": { "requirements": [...] }`.
 - **Cores/special blocks:** copy VE's root style (`alwaysUnlocked: true` + `researchCostMultiplier: 0`).
 
-### 6.5 Campaign-gated tech (when sectors exist later)
+### 7.5 Campaign-gated tech (when sectors exist later)
 
 Add objectives so the player must first reach/occupy a sector to research:
 
@@ -318,14 +475,14 @@ Add objectives so the player must first reach/occupy a sector to research:
 
 The sector preset must be defined first (`content/sectors/` + a sector map); VE's `warp-tech-base` is a complete example.
 
-### 6.6 Wrap-up
+### 7.6 Wrap-up
 
 - Optionally add `techtree.繁星 = 繁星` to the bundle (3.7 covers the fallback).
 - Run every new research-bearing JSON through the checklist in Section 7.
 
 ---
 
-## 7. Quick Checklist (verify each item when adding a tech-tree node)
+## 8. Quick Checklist (verify each item when adding a tech-tree node)
 
 1. □ The content is an UnlockableContent (item/liquid/block/unit/sector preset) — only these can go on the tree.
 2. □ `research` is written: string shorthand, or an object with `parent`.
@@ -348,5 +505,7 @@ The sector preset must be defined first (`content/sectors/` + a sector map); VE'
 | Planet ↔ tree-root linking | `type/Planet.java:452-458` |
 | Default block research cost | `world/Block.java:1271-1282` |
 | Default item/liquid cost | `ctype/UnlockableContent.java:205-207` |
+| Node icon default source | `TechTree.java`'s `icon()`, `ctype/UnlockableContent.java`'s `loadIcon()` |
+| Mod sprite packing/naming | `mod/Mods.java:382-426` (`packSprites`) |
 | Objective types list | `game/Objectives.java` |
 | Tree-name localization | `TechTree.java`'s `localizedName()`, bundle `techtree.*` |
