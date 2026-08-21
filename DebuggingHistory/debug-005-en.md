@@ -353,27 +353,54 @@ techtree.erekir = 埃里克尔
 
 Node display name rule (`TechTree.java`'s `localizedName()`): `Core.bundle.get("techtree." + name, name)` — **if the bundle has `techtree.<name>` it's used, otherwise it falls back to the name itself**. So a Chinese `name` (like "繁星") displays fine with no bundle key and won't crash; if you want an ASCII internal name with a localized display name, add a `techtree.<internal-name> = 繁星` entry.
 
-### 4.8 Node Icons (`icon`) — by Default, Just the Content's Own Sprite, Zero Config
+### 4.8 Node Icons (`icon`) — Zero JSON Changes; Sprites Auto-Attach by File Name
 
-The icon on every tech-tree node (drawn by `node.icon()` in `ResearchDialog`) is **by default the content's own sprite**. No icon code, no icon files needed: as long as the content's sprite exists, the node icon appears automatically. VE's tech-tree-only folder is the proof — grep finds no icon code in its scripts at all.
+**Conclusion first: the icon needs NO field in the JSON at all.** Across VE's 650+ JSON files, icon-related fields are zero (the 5 hits from an earlier grep were the "icon" substring inside "silicon" — false matches), and there is zero icon code in its scripts. An icon is just a sprite file that attaches automatically via "**file name = content name**."
 
-The mechanism chain (3 hops, all automatic):
+**The three things that happen automatically at game startup** (you don't do any of them):
 
-1. **Node → content** (`TechTree.java:159-161`): if the node's `icon` field was never set manually, `icon()` returns `new TextureRegionDrawable(content.uiIcon)`.
-2. **uiIcon → sprite** (`UnlockableContent.java:117-118`): it first looks for `<type>-<contentName>-ui` (e.g. `item-sp-lead-ui`), falling back to fullIcon.
-3. **fullIcon's fallback chain** (`UnlockableContent.java:110-116`), from most preferred to least: `fullOverride` (manually set in JSON) → `<type>-<contentName>-full` → `<contentName>-full` → **`<contentName>`** → `<type>-<contentName>` → `<contentName>1`.
+```text
+① You put a sprite file under sprites/ (any subfolder):
+   sprites/items/sp-lead.png
 
-Why mods "auto-hit": when mod sprites are packed (`Mods.java:382-426`, `packSprites`), every png under `sprites/` is **collected recursively** (subfolders don't matter, only the file name), and the atlas name is **`modname-filename`** (e.g. `sprites/items/iron.png` → `Starfield-iron`); a mod content's name (after transformName) is also `Starfield-iron`. **The two match → entry 4 (`<contentName>`) hits directly.** Subfolders (blocks/items/tech-tree-only/…) are purely organizational; they don't affect loading.
+② At startup the game collects every png into its texture atlas; each image's "name" = file name:
+   the atlas holds "Starfield-sp-lead" (the mod-name prefix is added automatically)
 
-VE case study: `content/blocks/tech-tree-only/core-nucleus-root.json` is a "fake block" (`buildVisibility: editorOnly` — not in the build menu, alive only in the tech tree) — its node icon is its own sprite `sprites/blocks/tech-tree-only/core-nucleus-root.png`, working automatically. Also note: sprites like `sprites/items/tech-tree-only/lead-node.png` are leftovers of **discarded content** in `content/unused/` (the unused folder is not loaded); they are not part of the current mechanism — don't be misled by them.
+③ When the game needs sp-lead's icon, it looks up the atlas by the content name:
+   look for "Starfield-sp-lead" → found → this image is used as the icon
+```
 
-To customize an icon (distinct from the build sprite):
+The key is ③: **the name used for the lookup IS the content name, and your sprite file happens to be named exactly that — the two line up, auto-match, zero config.**
+
+**Content ↔ sprite ↔ do-you-need-to-touch-JSON table**:
+
+| Content (defined in JSON) | Sprite file (you provide) | Does JSON need changes? |
+| --- | --- | --- |
+| `sp-lead` (content/items/sp-lead.json) | `sprites/items/sp-lead.png` | No — the file name matching is enough |
+| `core-nucleus-root` (VE fake block) | `sprites/blocks/tech-tree-only/core-nucleus-root.png` | No |
+| `copper` (VE patches vanilla) | no sprite file | No — patched vanilla content inherits the game's own sprite |
+
+**Why "file name = content name" auto-hits** (3 hops):
+
+1. Node → content (`TechTree.java:159-161`): if the node's `icon` was never set manually, `icon()` returns `content.uiIcon`.
+2. uiIcon → sprite (`UnlockableContent.java:117-118`): it first looks for `<type>-<contentName>-ui` (e.g. `item-sp-lead-ui`), falling back to fullIcon.
+3. fullIcon's fallback chain (`UnlockableContent.java:110-116`), most preferred to least: `fullOverride` (set manually in JSON) → `<type>-<contentName>-full` → `<contentName>-full` → **`<contentName>`** → `<type>-<contentName>` → `<contentName>1`.
+
+And when mod sprites are packed (`Mods.java:382-426`, `packSprites`), every png under `sprites/` is **collected recursively** (subfolders don't matter, only the file name) and the atlas name is **`modname-filename`** (e.g. `sprites/items/iron.png` → `Starfield-iron`); a mod content's name (after transformName) is also `Starfield-iron` — **they match → entry 4 (`<contentName>`) hits directly**. Subfolders (blocks/items/tech-tree-only/…) are purely organizational; they don't affect loading.
+
+**Three real VE pairings that verify this**:
+
+- New item `melon-dirt`: `content/items/sitrullus/melon-dirt.json` ↔ `sprites/items/melon-dirt.png` (exists), no icon field;
+- Fake block `core-nucleus-root`: `content/blocks/tech-tree-only/core-nucleus-root.json` ↔ `sprites/blocks/tech-tree-only/core-nucleus-root.png` (160×160 = size 5×32 px), no icon field;
+- Vanilla-patch `copper`: `content/items/copper.json` has no `type` field = patches vanilla → inherits the game's own sprite; no file needed at all.
+
+(Sprites like `sprites/items/tech-tree-only/lead-node.png` are leftovers of **discarded content** in `content/unused/` — the unused folder isn't loaded; they are not part of the current mechanism, don't be misled.)
+
+**To customize an icon** (distinct from the build sprite):
 
 - Drop a `<contentName>-ui.png` (e.g. `sprites/items/sp-lead-ui.png`) → UI (including the tech-tree node) uses it, while the build/entity keeps the original sprite;
 - Write `"fullOverride": "some-other-atlas-name"` in JSON → force the whole chain to use that sprite;
 - Set `node.icon = ...` manually in JS (not recommended when on the JSON route).
-
-> ⚠️ **Starfield current state**: all 37 sprites under `sprites/` are present, but the **`blocks/` folder is empty** — `sp-damaged-core` and `sp-core-mk1` have no sprites, so the whole fallback chain misses and they show Arc's **error texture** (a magenta error image). **The tech-tree root node icon (Damaged Core) is currently that error texture.** Fixing it just needs two sprites: `sprites/blocks/special/sp-damaged-core.png` and `sprites/blocks/special/sp-core-mk1.png` (a 3×3 block = 96×96 px; a 1×1 tile = 32 px).
 
 ---
 

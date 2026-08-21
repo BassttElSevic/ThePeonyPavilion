@@ -353,27 +353,54 @@ techtree.erekir = 埃里克尔
 
 节点显示名规则（`TechTree.java` 的 `localizedName()`）：`Core.bundle.get("techtree." + name, name)` —— **bundle 里有 `techtree.<name>` 就用它，没有就 fallback 到 name 本身**。所以 root 的 `name` 用中文（如"繁星"）也能正常显示，不写 bundle key 也不会崩；想用英文内部名 + 中文显示名，就加一条 `techtree.<内部名> = 繁星`。
 
-### 4.8 节点图标（icon）——默认就是内容贴图，零配置
+### 4.8 节点图标（icon）——JSON 零改动，贴图文件自动接入
 
-科技树界面每个节点上的图标（`ResearchDialog` 里 `node.icon()` 画出来的），**默认就是内容自己的贴图**。不需要任何 icon 代码、不需要建任何图标文件：只要内容的贴图存在，节点图标自动就有。VE 的 tech-tree-only 就是证据——scripts 里 grep 不到任何 icon 代码。
+**先给结论：图标不需要在 JSON 里写任何字段。** VE 全模组 650+ 个 JSON 里 icon 相关字段为零（之前 grep 到的 5 个是 "silicon" 里的 "icon" 子串误匹配），scripts 里 icon 代码为零。图标 = 一张贴图文件，靠"**文件名 = 内容名**"自动匹配，放对位置就出现。
 
-机制链路（3 跳，全部自动）：
+**游戏启动时自动发生的三件事**（你不需要做其中任何一件）：
 
-1. **节点 → 内容**（`TechTree.java:159-161`）：节点没手动设过 `icon` 字段，就返回 `new TextureRegionDrawable(content.uiIcon)`。
-2. **uiIcon → 贴图**（`UnlockableContent.java:117-118`）：优先找 `<类型>-<内容名>-ui`（如 `item-sp-lead-ui`），没有就退回 fullIcon。
-3. **fullIcon 的 fallback 链**（`UnlockableContent.java:110-116`），从最优先到最次：`fullOverride`（JSON 手动指定）→ `<类型>-<内容名>-full` → `<内容名>-full` → **`<内容名>`** → `<类型>-<内容名>` → `<内容名>1`。
+```text
+① 你把贴图文件放进 sprites/（任意子目录）：
+   sprites/items/sp-lead.png
 
-为什么模组"自动命中"：模组贴图打包时（`Mods.java:382-426` 的 `packSprites`），`sprites/` 下所有 png **递归收集**（子目录无所谓，只看文件名），atlas 名 = **`模组名-文件名`**（如 `sprites/items/iron.png` → `Starfield-iron`）；而模组内容名（transformName 处理过）也是 `Starfield-iron`。**两者一致 → 第 4 条 `<内容名>` 直接命中。** 子目录（blocks/items/tech-tree-only/…）纯属组织习惯，不影响加载。
+② 游戏启动时把所有 png 收进贴图库，每张图的"名字" = 文件名：
+   贴图库里有 "Starfield-sp-lead"（自动加模组名前缀）
 
-VE 案例：`content/blocks/tech-tree-only/core-nucleus-root.json` 是个"假方块"（`buildVisibility: editorOnly`，不在建造菜单、只活在科技树里）——它的节点图标 = 它自己的贴图 `sprites/blocks/tech-tree-only/core-nucleus-root.png`，自动生效。另注意：`sprites/items/tech-tree-only/lead-node.png` 这类是 `content/unused/` 里**废弃内容**的贴图残留（unused 文件夹不加载），不是当前机制的一部分，别被误导。
+③ 游戏要显示 sp-lead 的图标时，拿内容名去贴图库找图：
+   找 "Starfield-sp-lead" → 找到 → 用这张图当图标
+```
 
-想自定义图标（跟建造贴图区分）时：
+关键在 ③：**找图用的名字就是内容名，而你的贴图文件名恰好也叫这个——两边对上，自动匹配。**
+
+**内容 ↔ 贴图 ↔ 要不要改 JSON 对照表**：
+
+| 内容（JSON 里定义的） | 贴图文件（你放的） | 需要改 JSON 吗 |
+| --- | --- | --- |
+| `sp-lead`（content/items/sp-lead.json） | `sprites/items/sp-lead.png` | 不用，文件名对上即可 |
+| `core-nucleus-root`（VE 假方块） | `sprites/blocks/tech-tree-only/core-nucleus-root.png` | 不用 |
+| `copper`（VE patch 原版） | 无贴图文件 | 不用——patch 原版时沿用游戏本体的图 |
+
+**原理**（为什么"文件名 = 内容名"就自动命中，3 跳）：
+
+1. 节点 → 内容（`TechTree.java:159-161`）：节点没手动设过 `icon`，就返回 `content.uiIcon`。
+2. uiIcon → 贴图（`UnlockableContent.java:117-118`）：优先找 `<类型>-<内容名>-ui`（如 `item-sp-lead-ui`），没有退回 fullIcon。
+3. fullIcon fallback 链（`UnlockableContent.java:110-116`），从最优先到最次：`fullOverride`（JSON 手动指定）→ `<类型>-<内容名>-full` → `<内容名>-full` → **`<内容名>`** → `<类型>-<内容名>` → `<内容名>1`。
+
+而模组贴图打包时（`Mods.java:382-426` 的 `packSprites`），`sprites/` 下所有 png **递归收集**（子目录无所谓，只看文件名），atlas 名 = **`模组名-文件名`**（如 `sprites/items/iron.png` → `Starfield-iron`）；模组内容名（transformName 处理过）也是 `Starfield-iron`——**一致 → 第 4 条 `<内容名>` 直接命中**。子目录（blocks/items/tech-tree-only/…）纯属组织习惯，不影响加载。
+
+**VE 三个真实配对验证**：
+
+- 新物品 `melon-dirt`：`content/items/sitrullus/melon-dirt.json` ↔ `sprites/items/melon-dirt.png`（存在），无 icon 字段；
+- 假方块 `core-nucleus-root`：`content/blocks/tech-tree-only/core-nucleus-root.json` ↔ `sprites/blocks/tech-tree-only/core-nucleus-root.png`（160×160 = size 5×32px），无 icon 字段；
+- patch 原版 `copper`：`content/items/copper.json` 无 type 字段 = patch 原版 → 沿用游戏本体贴图，连文件都不用放。
+
+（`sprites/items/tech-tree-only/lead-node.png` 这类是 `content/unused/` 里**废弃内容**的贴图残留，unused 文件夹不加载，不是当前机制的一部分，别被误导。）
+
+**想自定义图标**（跟建造贴图区分）时：
 
 - 放一张 `<内容名>-ui.png`（如 `sprites/items/sp-lead-ui.png`）→ UI（含科技树节点）用这张，建造/实体仍用原贴图；
 - JSON 写 `"fullOverride": "另一张atlas名"` → 强制整条链用指定贴图；
 - JS 手动 `node.icon = ...`（JSON 路线不建议混用）。
-
-> ⚠️ **Starfield 现状**：`sprites/` 下 37 张贴图齐全，但 **`blocks/` 目录是空的**——`sp-damaged-core` 和 `sp-core-mk1` 两个 CoreBlock 没有贴图 → fallback 链全落空 → 显示 Arc 的 **error 纹理**（洋红色的错误图）。**科技树根节点图标（受损核心）现在就是 error 纹理**。要修只需补两张图：`sprites/blocks/special/sp-damaged-core.png` 和 `sprites/blocks/special/sp-core-mk1.png`（3×3 方块 = 96×96px，1×1 格 = 32px）。
 
 ---
 
